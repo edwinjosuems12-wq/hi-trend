@@ -32,9 +32,11 @@ editable y privado dentro del flujo de assets de HiTrendy.
   que confirmó la reserva. Si la fuente falta antes del submit, se falla y se
   devuelve la reserva al ledger original; después del submit no se vuelve a
   enviar el job remoto.
-- El proveedor demo y la capacidad de video permanecen offline y deshabilitados
-  por defecto. Activar un proveedor comercial requiere una decisión posterior
-  sobre costos, configuración, cancelación y contrato de errores.
+- El proveedor demo permanece offline y la capacidad queda deshabilitada por
+  defecto. Existe un adapter opcional de OpenAI/Sora seleccionado mediante
+  variables de entorno y protegido por allowlist, presupuesto y confirmación.
+  Otros proveedores comerciales requieren implementar el mismo puerto y su
+  contrato de errores.
 
 ## Consecuencias
 

@@ -2,9 +2,9 @@
 
 ## Estado
 
-Completada y aprobada — 2026-08-02. La implementación conserva el proveedor demo offline
-y la capacidad queda deshabilitada por defecto. No se habilita ningún proveedor
-real ni una ruta de pago durante esta wave. 
+Completada y aprobada — 2026-08-02. La implementación base conserva el
+proveedor demo offline y la capacidad queda deshabilitada por defecto. Después
+se añadió un adapter opcional de OpenAI/Sora sin cambiar el contrato durable.
 ## Objetivo
 
 Generar clips verticales editables con límites estrictos después de cerrar
@@ -13,8 +13,9 @@ imagen y costos, dejando el resultado como un `Asset` privado.
 ## Alcance implementado
 
 - storyboard determinista y editable como fallback, sin llamar a un modelo;
-- puerto `VideoGenerationProvider` reemplazable y proveedor demo con fixtures
-  MP4 reales de 5 y 10 segundos;
+- puerto `VideoGenerationProvider` reemplazable, proveedor demo con fixtures
+  MP4 reales de 5 y 10 segundos y adapter OpenAI/Sora para renders 16/20
+  segundos;
 - preflight firmado, confirmación explícita e idempotencia;
 - jobs asíncronos durables con polling acotado, timeout, fencing y
   `execution_unknown` después de cruzar el límite del proveedor;
@@ -61,7 +62,8 @@ proveedor recibió la solicitud; el barrido lo cierra como ambiguo sin reembolso
 ## Contratos y límites
 
 - Formato único: `9:16`.
-- Duraciones permitidas por configuración: 5 y 10 segundos en demo.
+- Duraciones permitidas por configuración: 5 y 10 segundos en demo; 16 y 20
+  segundos con el adapter OpenAI.
 - El provider demo solo acepta fixtures exactas de 5 y 10 segundos; no existe
   redondeo a la fixture más cercana. El storyboard y la UI consumen la misma
   allowlist servida por backend.
@@ -95,7 +97,9 @@ bytes permanecen fuera de PostgreSQL.
 - Los bytes del proveedor se validan antes de persistir el asset.
 - La clave de object storage la genera el servidor y el endpoint de archivo
   verifica la firma antes de consultar existencia o storage.
-- No se publican clips automáticamente ni se contactan proveedores reales.
+- No se publican clips automáticamente. Los proveedores reales solo se
+  contactan cuando el operador habilita explícitamente la ruta y el usuario
+  confirma un job.
 
 ## Operación local/beta
 
@@ -111,8 +115,9 @@ PYTHONPATH=. python -m app.videos.worker --interval 5 --batch 5
 
 `--once` ejecuta un ciclo reproducible; el segundo comando mantiene el worker
 activo hasta `SIGINT`/`SIGTERM`. Debe ejecutarse con la misma `DATABASE_URL`,
-storage y ruta de provider que la API. La wave beta usa únicamente el provider
-demo offline.
+storage y ruta de provider que la API. La demo usa el provider offline. Para
+OpenAI, la misma orden de worker usa la clave del entorno del backend y
+conserva el estado ambiguo si un submit expira.
 
 ## Pruebas y aprobación
 
@@ -143,13 +148,16 @@ completo `167 passed` con typecheck, lint y build exitosos. La wave fue revisada
 - [x] El fallback de storyboard es editable y no requiere proveedor.
 - [x] El uso se registra sin convertir un costo desconocido en cero.
 - [x] El resultado validado queda como `Asset` privado con URL firmada.
-- [x] No hay publicación, scheduling, scraping ni proveedor real.
+- [x] No hay publicación automática, scheduling de publicaciones ni scraping;
+  el proveedor OpenAI es opcional y no se activa por defecto.
 
 ## Limitaciones explícitas
 
-Esta wave no incorpora proveedores comerciales, webhooks externos, cancelación
-desde la UI, edición/render posterior del MP4, soporte HTTP `Range`, publicación
-ni métricas de redes. Esas capacidades requieren contratos y autorización
-propios; no forman parte de WAVE-013.
+Esta wave no incorpora webhooks externos, cancelación desde la UI, edición/render
+posterior del MP4, soporte HTTP `Range`, publicación ni métricas de redes. Esas
+capacidades requieren contratos y autorización propios; no forman parte de
+WAVE-013. Sora 2 aparece deprecado en la documentación actual de OpenAI y tiene
+cierre programado para el 24 de septiembre de 2026; el adapter debe sustituirse
+antes de depender de video a largo plazo.
 
 No hacer commit ni push automáticamente. Dejar el working tree revisable.

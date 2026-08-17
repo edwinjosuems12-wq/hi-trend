@@ -403,8 +403,14 @@ class Settings:
 
         self.ai_provider: str = values.get("AI_PROVIDER", "demo").strip().lower()
         self.ai_model: str = values.get("AI_MODEL", "demo-v1").strip()
-        self.ai_base_url: str = values.get("AI_BASE_URL", "").strip().rstrip("/")
-        self.ai_api_key: str = values.get("AI_API_KEY", "").strip()
+        self.openai_api_key: str = values.get("OPENAI_API_KEY", "").strip()
+        self.openai_base_url: str = (
+            values.get("OPENAI_BASE_URL", "https://api.openai.com/v1").strip().rstrip("/")
+        )
+        self.ai_base_url: str = values.get("AI_BASE_URL", "").strip().rstrip("/") or (
+            self.openai_base_url if self.openai_api_key else ""
+        )
+        self.ai_api_key: str = values.get("AI_API_KEY", "").strip() or self.openai_api_key
         self.ai_timeout_seconds: float = _positive_float(
             values.get("AI_TIMEOUT_SECONDS", "30"),
             name="AI_TIMEOUT_SECONDS",
@@ -436,8 +442,10 @@ class Settings:
 
         self.vision_provider: str = values.get("VISION_PROVIDER", "demo").strip().lower()
         self.vision_model: str = values.get("VISION_MODEL", "demo-vision-v1").strip()
-        self.vision_base_url: str = values.get("VISION_BASE_URL", "").strip().rstrip("/")
-        self.vision_api_key: str = values.get("VISION_API_KEY", "").strip()
+        self.vision_base_url: str = values.get("VISION_BASE_URL", "").strip().rstrip("/") or (
+            self.openai_base_url if self.openai_api_key else ""
+        )
+        self.vision_api_key: str = values.get("VISION_API_KEY", "").strip() or self.openai_api_key
 
         self.jwt_secret: str = values.get("JWT_SECRET", "replace-in-local-env").strip()
         self.session_cookie_name: str = values.get(
@@ -458,11 +466,17 @@ class Settings:
         # Beta operations are deliberately adapter-based. ``demo`` email is
         # useful for local/tests because it records an in-memory delivery, but
         # it can never become a production provider by accident.
-        self.email_provider: str = values.get(
-            "EMAIL_PROVIDER",
-            "demo" if self.app_env in {"development", "test"} else "disabled",
-        ).strip().lower()
-        self.email_from: str = values.get("EMAIL_FROM", "HiTrendy <no-reply@hitrendy.local>").strip()
+        self.email_provider: str = (
+            values.get(
+                "EMAIL_PROVIDER",
+                "demo" if self.app_env in {"development", "test"} else "disabled",
+            )
+            .strip()
+            .lower()
+        )
+        self.email_from: str = values.get(
+            "EMAIL_FROM", "HiTrendy <no-reply@hitrendy.local>"
+        ).strip()
         self.resend_api_key: str = values.get("RESEND_API_KEY", "").strip()
         self.email_timeout_seconds: float = _bounded_positive_float(
             values.get("EMAIL_TIMEOUT_SECONDS", "10"),
@@ -474,15 +488,17 @@ class Settings:
             name="PASSWORD_RESET_TTL_SECONDS",
             maximum=86_400,
         )
-        self.password_reset_url: str = values.get(
-            "PASSWORD_RESET_URL", f"{self.frontend_url}/reset-password"
-        ).strip().rstrip("/")
+        self.password_reset_url: str = (
+            values.get("PASSWORD_RESET_URL", f"{self.frontend_url}/reset-password")
+            .strip()
+            .rstrip("/")
+        )
         # Email verification is an explicit beta decision. Password recovery
         # is available now; account verification remains opt-in until a real
         # delivery domain is configured.
-        self.email_verification_mode: str = values.get(
-            "EMAIL_VERIFICATION_MODE", "disabled"
-        ).strip().lower()
+        self.email_verification_mode: str = (
+            values.get("EMAIL_VERIFICATION_MODE", "disabled").strip().lower()
+        )
         self.support_email: str = values.get("SUPPORT_EMAIL", "support@hitrendy.local").strip()
         self.privacy_policy_version: str = values.get(
             "PRIVACY_POLICY_VERSION", "2026-08-02"
@@ -501,9 +517,9 @@ class Settings:
             name="BETA_INVITE_TTL_SECONDS",
             maximum=2_592_000,
         )
-        self.usage_enforcement_mode: str = values.get(
-            "USAGE_ENFORCEMENT_MODE", "off"
-        ).strip().lower()
+        self.usage_enforcement_mode: str = (
+            values.get("USAGE_ENFORCEMENT_MODE", "off").strip().lower()
+        )
         self.monthly_ai_budget_usd: float = _bounded_non_negative_float(
             values.get("MONTHLY_AI_BUDGET_USD", "0"),
             name="MONTHLY_AI_BUDGET_USD",
@@ -538,9 +554,9 @@ class Settings:
             values.get("METRICS_ENABLED", "1"), name="METRICS_ENABLED"
         )
         self.metrics_auth_token: str = values.get("METRICS_AUTH_TOKEN", "").strip()
-        self.error_tracking_provider: str = values.get(
-            "ERROR_TRACKING_PROVIDER", "logging"
-        ).strip().lower()
+        self.error_tracking_provider: str = (
+            values.get("ERROR_TRACKING_PROVIDER", "logging").strip().lower()
+        )
         self.error_tracking_dsn: str = values.get("ERROR_TRACKING_DSN", "").strip()
         self.google_sign_in_enabled: bool = _as_bool(
             values.get("GOOGLE_SIGN_IN_ENABLED", "0"),
@@ -904,17 +920,30 @@ class Settings:
                 and self.image_generation_model
                 and self.image_generation_model in self.image_generation_allowed_models
             )
+        if self.image_provider == "openai":
+            return bool(
+                self.openai_api_key
+                and self.image_generation_model
+                and self.image_generation_model in self.image_generation_allowed_models
+            )
         return False
 
     @property
     def video_generation_configured(self) -> bool:
-        """True only when the offline video provider is usable in this environment."""
+        """True only when a selected video route can legitimately be used."""
 
-        return (
-            self.video_generation_enabled
-            and self.video_provider == "demo"
-            and self.app_env in {"development", "test"}
-        )
+        if not self.video_generation_enabled:
+            return False
+        if self.video_provider == "demo":
+            return self.app_env in {"development", "test"}
+        if self.video_provider == "openai":
+            return bool(
+                self.openai_api_key
+                and self.video_generation_model
+                and self.video_generation_model in self.video_generation_allowed_models
+                and set(self.video_generation_allowed_durations).issubset({16, 20})
+            )
+        return False
 
     @property
     def social_demo_provider_configured(self) -> bool:
@@ -981,7 +1010,9 @@ class Settings:
         if self.error_tracking_provider not in {"disabled", "logging", "sentry"}:
             raise RuntimeError("ERROR_TRACKING_PROVIDER no es compatible.")
         if self.error_tracking_provider == "sentry" and not self.error_tracking_dsn:
-            raise RuntimeError("ERROR_TRACKING_DSN es obligatoria con ERROR_TRACKING_PROVIDER=sentry.")
+            raise RuntimeError(
+                "ERROR_TRACKING_DSN es obligatoria con ERROR_TRACKING_PROVIDER=sentry."
+            )
         if not self.password_reset_url:
             raise RuntimeError("PASSWORD_RESET_URL es obligatoria.")
         _validate_http_url(
@@ -991,7 +1022,7 @@ class Settings:
         )
         if not self.support_email or "@" not in self.support_email:
             raise RuntimeError("SUPPORT_EMAIL debe ser un correo válido.")
-        if self.video_provider not in {"demo"}:
+        if self.video_provider not in {"demo", "openai"}:
             raise RuntimeError("VIDEO_PROVIDER no es compatible.")
         if self.video_provider == "demo" and not set(
             self.video_generation_allowed_durations
@@ -999,7 +1030,31 @@ class Settings:
             raise RuntimeError(
                 "VIDEO_GENERATION_ALLOWED_DURATIONS solo puede usar fixtures demo de 5 o 10 segundos."
             )
-        if self.video_generation_enabled and self.is_production_like:
+        if self.video_provider == "openai" and self.video_generation_enabled:
+            if not self.openai_api_key:
+                raise RuntimeError("OPENAI_API_KEY es obligatoria para VIDEO_PROVIDER=openai.")
+            if not self.video_generation_model:
+                raise RuntimeError(
+                    "VIDEO_GENERATION_MODEL es obligatoria para VIDEO_PROVIDER=openai."
+                )
+            if self.video_generation_model not in self.video_generation_allowed_models:
+                raise RuntimeError(
+                    "VIDEO_GENERATION_MODEL debe estar en VIDEO_GENERATION_ALLOWED_MODELS."
+                )
+            if not set(self.video_generation_allowed_durations).issubset({16, 20}):
+                raise RuntimeError(
+                    "VIDEO_GENERATION_ALLOWED_DURATIONS para OpenAI debe usar 16 o 20 segundos."
+                )
+            _validate_http_url(
+                self.openai_base_url,
+                name="OPENAI_BASE_URL",
+                require_https=self.is_production_like,
+            )
+        if (
+            self.video_generation_enabled
+            and self.is_production_like
+            and self.video_provider == "demo"
+        ):
             raise RuntimeError(
                 "VIDEO_GENERATION_ENABLED no puede activarse con VIDEO_PROVIDER=demo "
                 "en staging ni producción."
@@ -1208,7 +1263,7 @@ class Settings:
                 require_https=self.is_production_like,
             )
 
-        if self.image_provider not in {"demo", "openrouter"}:
+        if self.image_provider not in {"demo", "openai", "openrouter"}:
             raise RuntimeError("IMAGE_PROVIDER no es compatible.")
         # A claim must outlive the call it protects. If the lease could expire
         # while a legitimate provider call is still in flight, the job would be
@@ -1239,6 +1294,22 @@ class Settings:
             _validate_http_url(
                 self.openrouter_base_url,
                 name="OPENROUTER_BASE_URL",
+                require_https=self.is_production_like,
+            )
+        if self.image_generation_enabled and self.image_provider == "openai":
+            if not self.openai_api_key:
+                raise RuntimeError("OPENAI_API_KEY es obligatoria para IMAGE_PROVIDER=openai.")
+            if not self.image_generation_model:
+                raise RuntimeError(
+                    "IMAGE_GENERATION_MODEL es obligatoria para IMAGE_PROVIDER=openai."
+                )
+            if self.image_generation_model not in self.image_generation_allowed_models:
+                raise RuntimeError(
+                    "IMAGE_GENERATION_MODEL debe estar en IMAGE_GENERATION_ALLOWED_MODELS."
+                )
+            _validate_http_url(
+                self.openai_base_url,
+                name="OPENAI_BASE_URL",
                 require_https=self.is_production_like,
             )
 

@@ -6,7 +6,14 @@ from app.core.capabilities import QualityLevel
 from app.core.config import Settings
 from app.db.session import get_database_engine_options
 from app.providers.content import DemoContentModelProvider, OpenAICompatibleContentModelProvider
-from app.providers.factory import get_content_provider, get_vision_provider
+from app.providers.factory import (
+    get_content_provider,
+    get_image_generation_provider,
+    get_video_generation_provider,
+    get_vision_provider,
+)
+from app.providers.images import OpenAIImageGenerationProvider
+from app.providers.video import OpenAIVideoGenerationProvider
 from app.providers.vision import DemoVisionReviewProvider
 
 SECRET = "sentinel-config-secret-do-not-echo"
@@ -71,6 +78,49 @@ def test_openai_compatible_configuration_is_valid_and_typed() -> None:
     assert settings.ai_max_retries == 1
     assert isinstance(settings.ai_timeout_seconds, float)
     assert isinstance(settings.run_real_ai_smoke, bool)
+
+
+def test_openai_api_key_is_reused_by_text_and_vision_routes() -> None:
+    configured = Settings(
+        {
+            "APP_ENV": "development",
+            "OPENAI_API_KEY": SECRET,
+            "AI_PROVIDER": "openai-compatible",
+            "AI_MODEL": "gpt-5.6",
+            "VISION_PROVIDER": "openai-compatible",
+            "VISION_MODEL": "gpt-5.6",
+        }
+    )
+
+    configured.validate_runtime_configuration()
+
+    assert configured.ai_api_key == SECRET
+    assert configured.ai_base_url == "https://api.openai.com/v1"
+    assert configured.vision_api_key == SECRET
+    assert configured.vision_base_url == "https://api.openai.com/v1"
+
+
+def test_openai_media_configuration_is_valid_with_one_key() -> None:
+    configured = Settings(
+        {
+            "APP_ENV": "development",
+            "OPENAI_API_KEY": SECRET,
+            "IMAGE_GENERATION_ENABLED": "1",
+            "IMAGE_PROVIDER": "openai",
+            "IMAGE_GENERATION_MODEL": "gpt-image-2",
+            "IMAGE_GENERATION_ALLOWED_MODELS": "gpt-image-2",
+            "VIDEO_GENERATION_ENABLED": "1",
+            "VIDEO_PROVIDER": "openai",
+            "VIDEO_GENERATION_MODEL": "sora-2",
+            "VIDEO_GENERATION_ALLOWED_MODELS": "sora-2",
+            "VIDEO_GENERATION_ALLOWED_DURATIONS": "16,20",
+        }
+    )
+
+    configured.validate_runtime_configuration()
+
+    assert configured.image_generation_configured is True
+    assert configured.video_generation_configured is True
 
 
 def test_production_allows_phase1_demo_vision() -> None:
@@ -175,6 +225,28 @@ def test_factory_selects_explicit_demo_and_openai_compatible_providers(monkeypat
     provider = get_content_provider()
     assert isinstance(provider, OpenAICompatibleContentModelProvider)
     assert provider.model_name == "approved-model"
+
+
+def test_factory_selects_direct_openai_media_providers(monkeypatch) -> None:
+    configured = Settings(
+        {
+            "APP_ENV": "development",
+            "OPENAI_API_KEY": SECRET,
+            "IMAGE_GENERATION_ENABLED": "1",
+            "IMAGE_PROVIDER": "openai",
+            "IMAGE_GENERATION_MODEL": "gpt-image-2",
+            "IMAGE_GENERATION_ALLOWED_MODELS": "gpt-image-2",
+            "VIDEO_GENERATION_ENABLED": "1",
+            "VIDEO_PROVIDER": "openai",
+            "VIDEO_GENERATION_MODEL": "sora-2",
+            "VIDEO_GENERATION_ALLOWED_MODELS": "sora-2",
+            "VIDEO_GENERATION_ALLOWED_DURATIONS": "16,20",
+        }
+    )
+    monkeypatch.setattr("app.providers.factory.settings", configured)
+
+    assert isinstance(get_image_generation_provider(), OpenAIImageGenerationProvider)
+    assert isinstance(get_video_generation_provider(), OpenAIVideoGenerationProvider)
 
 
 def test_openrouter_configuration_uses_the_existing_openai_compatible_provider(monkeypatch) -> None:

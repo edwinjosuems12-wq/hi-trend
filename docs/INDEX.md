@@ -61,6 +61,7 @@ This index is the human and agent entry point.
 - [Deployment](06-implementation/deployment.md)
 - [Frontend error resolution plan](06-implementation/error-resolution-plan.md)
 - [MVP delivery plan](06-implementation/mvp-delivery-plan.md)
+- [Provider keys and activation](06-implementation/provider-keys.md)
 - [Integration snippets](06-implementation/snippets/README.md)
 - [Graphify preparation](06-implementation/graphify-ready.md)
 - [Figma implementation plan](06-implementation/figma-implementation-plan.md)
