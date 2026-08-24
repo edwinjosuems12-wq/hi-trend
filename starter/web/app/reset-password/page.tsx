@@ -16,6 +16,7 @@ function ResetPasswordForm() {
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [message, setMessage] = useState("");
+  const [devResetUrl, setDevResetUrl] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -23,18 +24,24 @@ function ResetPasswordForm() {
     event.preventDefault();
     setError("");
     setMessage("");
+    setDevResetUrl("");
     setSubmitting(true);
     try {
       if (!token) {
-        await api.auth.passwordReset.request(email.trim());
-        setMessage("Si el correo está registrado, recibirás instrucciones para recuperar el acceso.");
+        const response = await api.auth.passwordReset.request(email.trim());
+        if (response.dev_reset_url) {
+          setMessage("Si existe una cuenta con este correo, se generaron las instrucciones de acceso.");
+          setDevResetUrl(response.dev_reset_url);
+        } else {
+          setMessage("Si el correo está registrado, recibirás instrucciones para recuperar el acceso.");
+        }
       } else {
         if (password !== confirmation) {
           setError("Las contraseñas no coinciden.");
           return;
         }
         await api.auth.passwordReset.confirm(token, password);
-        setMessage("Tu contraseña fue actualizada. Ya puedes iniciar sesión.");
+        setMessage("Tu contraseña fue actualizada con éxito. Ya puedes iniciar sesión.");
       }
     } catch (reason) {
       setError(reason instanceof ApiError ? reason.message : "No pudimos completar la recuperación.");
@@ -72,6 +79,16 @@ function ResetPasswordForm() {
             </>
           )}
           {message ? <p role="status" className="auth-success">{message}</p> : null}
+          {devResetUrl ? (
+            <div style={{ padding: "0.85rem 1rem", background: "rgba(183, 156, 250, 0.15)", borderRadius: "0.8rem", border: "1px solid var(--border)", margin: "0.5rem 0" }}>
+              <p style={{ margin: "0 0 0.4rem 0", fontWeight: 700, fontSize: "0.85rem", color: "var(--foreground)" }}>
+                Enlace directo de restablecimiento (Modo Demo / Dev):
+              </p>
+              <Link href={devResetUrl} style={{ wordBreak: "break-all", color: "var(--primary)", fontWeight: 800, fontSize: "0.85rem" }}>
+                Haz clic aquí para cambiar tu contraseña
+              </Link>
+            </div>
+          ) : null}
           {error ? <p role="alert" className="auth-error">{error}</p> : null}
           <button type="submit" disabled={submitting}>
             {submitting ? "Procesando…" : token ? "Actualizar contraseña" : "Enviar instrucciones"}

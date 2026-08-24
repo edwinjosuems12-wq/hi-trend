@@ -5,7 +5,11 @@
   "workspaces": [
     "starter/web"
   ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
+    "build": "npm run web:build",
     "web:dev": "npm run dev -w starter/web",
     "web:build": "npm run build -w starter/web",
     "web:typecheck": "npm run typecheck -w starter/web",
@@ -13,7 +17,7 @@
     "web:test": "npm run test -w starter/web",
     "validate": "bash scripts/validate.sh",
     "validate:e2e": "bash scripts/validate-e2e.sh",
-    "backend:dev": "cd starter/backend && PYTHONPATH=. ../../.venv/bin/python -m alembic upgrade head && PYTHONPATH=. ../../.venv/bin/python -m uvicorn app.main:app --reload --port 8000",
+    "backend:dev": "cd starter/backend && python -m alembic upgrade head && python -m uvicorn ap  p.main:app --reload --port 8000",
     "backend:test": "PYTHONPATH=starter/backend python -m pytest starter/backend/tests",
     "beta:check": "python scripts/beta_readiness_check.py",
     "beta:load-smoke": "python scripts/load_smoke.py",

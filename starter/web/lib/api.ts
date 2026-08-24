@@ -464,6 +464,20 @@ async function demoRequest<T>(path: string, options: RequestInit): Promise<T> {
     return cloneDemo(demoData.auth) as T;
   }
 
+  if (pathname === "/api/v1/auth/password-reset/request" && method === "POST") {
+    const data = parseJsonBody(options.body);
+    const email = typeof data.email === "string" ? data.email : "";
+    const demoToken = "demo-reset-token-123";
+    return {
+      message: "Si existe una cuenta con este correo, recibirás instrucciones para recuperar el acceso.",
+      dev_reset_url: `/reset-password?token=${demoToken}`,
+    } as T;
+  }
+
+  if (pathname === "/api/v1/auth/password-reset/confirm" && method === "POST") {
+    return { status: "reset" } as T;
+  }
+
   if (pathname === "/api/v1/auth/logout") {
     return { ok: true } as T;
   }
@@ -1559,7 +1573,7 @@ export const api = {
     passwordReset: {
       request(email: string) {
         return resetCsrfAfter(
-          request<{ message: string }>(`${BASE}/auth/password-reset/request`, {
+          request<{ message: string; dev_reset_url?: string }>(`${BASE}/auth/password-reset/request`, {
             method: "POST",
             body: JSON.stringify({ email }),
           })
