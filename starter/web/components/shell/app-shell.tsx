@@ -16,13 +16,14 @@ import {
 } from "@/lib/i18n";
 
 type IconName =
-  "studio" | "dashboard" | "templates" | "settings" | "logout" | "bell";
+  "studio" | "dashboard" | "trends" | "templates" | "settings" | "logout" | "bell";
 type NavItem = { href: string; label: string; icon: IconName };
 
 function navigationFor(copy: ReturnType<typeof getCopy>): NavItem[] {
   return [
     { href: routes.studioNew, label: copy.nav.studio, icon: "studio" },
     { href: routes.dashboard, label: copy.nav.dashboard, icon: "dashboard" },
+    { href: routes.trends, label: copy.nav.trends, icon: "trends" },
     { href: routes.templates, label: copy.nav.templates, icon: "templates" },
     { href: routes.settings, label: copy.nav.settings, icon: "settings" },
   ];
@@ -58,6 +59,13 @@ function AppIcon({ name }: { name: IconName }) {
         <rect x="14" y="3" width="7" height="7" rx="2" />
         <rect x="3" y="14" width="7" height="7" rx="2" />
         <rect x="14" y="14" width="7" height="7" rx="2" />
+      </svg>
+    );
+  if (name === "trends")
+    return (
+      <svg {...common}>
+        <path d="M4 18 9 12l4 3 7-9" />
+        <path d="M15 6h5v5" />
       </svg>
     );
   if (name === "templates")
@@ -99,6 +107,7 @@ function isCurrentPath(pathname: string, href: string) {
 function sectionLabel(pathname: string, copy: ReturnType<typeof getCopy>) {
   if (pathname.startsWith("/studio")) return copy.nav.studio;
   if (pathname.startsWith("/dashboard")) return copy.nav.dashboard;
+  if (pathname.startsWith("/trends")) return copy.nav.trends;
   if (pathname.startsWith("/templates")) return copy.nav.templates;
   if (pathname.startsWith("/settings")) return copy.nav.settings;
   if (pathname.startsWith("/onboarding")) return copy.nav.dashboard;
