@@ -26,6 +26,14 @@ describe("AppShell", () => {
       "aria-current",
       "page"
     );
+    expect(screen.getAllByRole("link", { name: "Dashboard" })[0]).toHaveAttribute(
+      "href",
+      "/dashboard"
+    );
+    expect(screen.getAllByRole("link", { name: "Tendencias" })[0]).toHaveAttribute(
+      "href",
+      "/trends"
+    );
     expect(
       screen.getByRole("complementary", { name: "Navegación principal" })
     ).toBeInTheDocument();

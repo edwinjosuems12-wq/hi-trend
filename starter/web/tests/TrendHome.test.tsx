@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { axe } from "vitest-axe";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
-import DashboardPage from "@/app/dashboard/page";
+import TrendsPage from "@/app/trends/page";
 import { api } from "@/lib/api";
 import type { TrendHome, TrendHomeStatus, TrendSource } from "@/types/trends";
 
@@ -111,7 +111,7 @@ beforeEach(() => {
 describe("Trends Home", () => {
   test("renders verifiable cards, visible dates, CTA by ID and basic accessibility", async () => {
     vi.spyOn(api.trends, "home").mockResolvedValue(home());
-    const { container } = render(<DashboardPage />);
+    const { container } = render(<TrendsPage />);
 
     expect(await screen.findByRole("heading", { name: "Café frío local" })).toBeInTheDocument();
     expect(screen.getAllByText(/30 jul 2026/i)).toHaveLength(2);
@@ -139,7 +139,7 @@ describe("Trends Home", () => {
           rejectLoad = reject;
         })
     );
-    render(<DashboardPage />);
+    render(<TrendsPage />);
     expect(screen.getByLabelText("Cargando tendencias")).toHaveAttribute(
       "aria-busy",
       "true"
@@ -160,7 +160,7 @@ describe("Trends Home", () => {
     ["failed", "La última recopilación no pudo completarse"],
   ] as const)("renders the %s state", async (status, label) => {
     vi.spyOn(api.trends, "home").mockResolvedValue(home(status));
-    render(<DashboardPage />);
+    render(<TrendsPage />);
     expect(await screen.findByText(new RegExp(label, "i"))).toBeInTheDocument();
   });
 
@@ -172,7 +172,7 @@ describe("Trends Home", () => {
     };
     vi.spyOn(api.trends, "home").mockResolvedValue(cooldown);
     const refresh = vi.spyOn(api.trends, "refresh");
-    render(<DashboardPage />);
+    render(<TrendsPage />);
     const button = await screen.findByRole("button", { name: "Actualizar" });
     expect(button).toBeDisabled();
     fireEvent.click(button);
@@ -197,7 +197,7 @@ describe("Trends Home", () => {
       next_refresh_at: cooled.next_refresh_at,
       retry_after_seconds: 3600,
     });
-    render(<DashboardPage />);
+    render(<TrendsPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Actualizar" }));
     await waitFor(() =>
       expect(api.trends.refresh).toHaveBeenCalledWith(
@@ -215,7 +215,7 @@ describe("Trends Home", () => {
   test("aggregates every scope and only claims the refresh scope", async () => {
     const aggregated = home();
     vi.spyOn(api.trends, "home").mockResolvedValue(aggregated);
-    render(<DashboardPage />);
+    render(<TrendsPage />);
 
     // Cards from both scopes are visible, each declaring its own scope.
     const cards = within(
@@ -238,7 +238,7 @@ describe("Trends Home", () => {
   test("loads the safe sources modal and closes it from the keyboard", async () => {
     vi.spyOn(api.trends, "home").mockResolvedValue(home());
     vi.spyOn(api.trends, "sources").mockResolvedValue([source]);
-    render(<DashboardPage />);
+    render(<TrendsPage />);
     fireEvent.click(await screen.findByRole("button", { name: /Ver fuentes/ }));
     const dialog = await screen.findByRole("dialog", { name: "Fuentes de tendencias" });
     expect(within(dialog).getByText("Noticias locales")).toBeInTheDocument();

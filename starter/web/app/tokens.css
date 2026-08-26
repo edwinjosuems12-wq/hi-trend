@@ -157,8 +157,8 @@
   /* 4a. Landing surface                                                      */
   /* ======================================================================== */
   --landing-background: var(--ht-navy);
-  --landing-hero-background: var(--ht-navy);
-  --landing-hero-deep: var(--ht-navy-deep);
+  --landing-hero-background: #e8dbf7;
+  --landing-hero-deep: var(--ht-navy);
   --landing-hero-glow: radial-gradient(
     120% 90% at 50% -10%,
     var(--ht-hero-glow) 0%,
