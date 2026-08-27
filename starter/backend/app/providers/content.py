@@ -16,6 +16,22 @@ from app.generation.contracts import (
 )
 from app.generation.prompt_registry import get_short_video_script_prompt, get_social_copy_prompt
 
+# Families that expose no sampling controls. Matched by prefix so future point
+# releases (gpt-5.1-mini, o3-pro) are covered without another edit here.
+_FIXED_TEMPERATURE_MODEL_PREFIXES = ("gpt-5", "o1", "o3", "o4")
+
+
+def _rejects_temperature(model_name: str) -> bool:
+    """Whether the model refuses an explicit ``temperature``.
+
+    OpenRouter-style identifiers carry a vendor prefix (``openai/gpt-5-mini``),
+    so the comparison runs on the segment after the last slash.
+    """
+
+    return model_name.rsplit("/", 1)[-1].strip().lower().startswith(
+        _FIXED_TEMPERATURE_MODEL_PREFIXES
+    )
+
 
 class ContentModelProvider(Protocol):
     provider_name: str
@@ -437,12 +453,17 @@ class OpenAICompatibleContentModelProvider:
     async def _complete(
         self, *, messages: list[dict[str, str]], response_schema: dict[str, Any] | None = None
     ) -> dict:
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model_name,
             "messages": messages,
             "response_format": self._response_format(response_schema),
-            "temperature": 0.4,
         }
+        # Reasoning models (gpt-5, o1, o3, o4) reject any temperature other than
+        # their default of 1 with an HTTP 400, which would fail every generation
+        # instead of degrading. Sampling is not configurable on them, so the
+        # sensible request is the one that omits the parameter entirely.
+        if not _rejects_temperature(self.model_name):
+            payload["temperature"] = 0.4
 
         for attempt in range(self._max_retries + 1):
             try:
