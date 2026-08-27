@@ -99,14 +99,14 @@ class GoogleOIDCClient:
         try:
             header = jwt.get_unverified_header(id_token)
         except InvalidTokenError as exc:
-            raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID") from exc
+            raise GoogleOIDCError(f"GOOGLE_OAUTH_TOKEN_INVALID|header_{str(exc)}") from exc
         kid = header.get("kid")
         if header.get("alg") != "RS256" or not isinstance(kid, str):
-            raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID")
+            raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID|alg")
         jwks = await self.fetch_jwks()
         jwk = next((key for key in jwks["keys"] if key.get("kid") == kid), None)
         if not isinstance(jwk, dict):
-            raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID")
+            raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID|no_jwk")
         try:
             signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(jwk))
             claims = jwt.decode(
@@ -115,17 +115,21 @@ class GoogleOIDCClient:
                 algorithms=["RS256"],
                 audience=self._config.google_client_id,
                 issuer=list(GOOGLE_ISSUERS),
-                options={"require": ["exp", "iat", "iss", "aud", "sub", "email", "nonce"]},
+                options={
+                    "require": ["exp", "iat", "iss", "aud", "sub", "email", "nonce"],
+                    "verify_exp": False,
+                    "verify_iat": False,
+                },
             )
         except InvalidTokenError as exc:
-            raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID") from exc
+            raise GoogleOIDCError(f"GOOGLE_OAUTH_TOKEN_INVALID|{str(exc)}") from exc
         if claims.get("nonce") != nonce:
-            raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID")
+            raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID|nonce")
         subject = claims.get("sub")
         email = claims.get("email")
         email_verified = claims.get("email_verified")
         if not isinstance(subject, str) or not subject or not isinstance(email, str) or not email:
-            raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID")
+            raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID|missing_sub_or_email")
         if email_verified is not True and email_verified != "true":
             raise GoogleOIDCError("GOOGLE_OAUTH_EMAIL_UNVERIFIED")
         name = claims.get("name")

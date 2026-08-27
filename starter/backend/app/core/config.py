@@ -11,6 +11,12 @@ from os import environ
 from pathlib import Path
 from urllib.parse import urlparse
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 # A feed identifier becomes part of stable cache, runtime-health and metric
 # keys, so it stays short, lowercase and free of separators or whitespace.
 RSS_IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
