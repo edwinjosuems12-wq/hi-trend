@@ -5,6 +5,7 @@ import binascii
 import json
 import math
 import re
+import sys
 from collections.abc import Mapping
 from ipaddress import ip_address, ip_network
 from os import environ
@@ -13,9 +14,20 @@ from urllib.parse import urlparse
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
+except ImportError:  # pragma: no cover - the dependency is declared, this is a guard
     pass
+else:
+    # Loads the repository-root .env into the process environment on import, for
+    # every entry point that reads settings (uvicorn, alembic). The path is
+    # explicit so the working directory of the entry point cannot change which
+    # file is picked up. Existing process env vars always win, so config
+    # injected by the hosting platform is never shadowed by a stray .env.
+    #
+    # Skipped under pytest: the suite relies on unset vars falling back to safe
+    # defaults (e.g. AI_PROVIDER -> "demo"), and a developer's real .env would
+    # otherwise leak live provider config into the tests and fail them.
+    if "pytest" not in sys.modules:
+        load_dotenv(Path(__file__).resolve().parents[4] / ".env")
 
 # A feed identifier becomes part of stable cache, runtime-health and metric
 # keys, so it stays short, lowercase and free of separators or whitespace.

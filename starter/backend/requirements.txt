@@ -18,3 +18,6 @@ python-multipart>=0.0.9,<1
 boto3>=1.35,<2
 pillow>=10.4,<12
 defusedxml>=0.7,<1
+# Direct dependency: app.core.config loads the repository-root .env on import so
+# every entry point (uvicorn, alembic) sees the same configuration.
+python-dotenv>=1.0,<2
