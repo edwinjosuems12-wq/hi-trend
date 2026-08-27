@@ -30,7 +30,7 @@ const nextConfig = {
     return [
       {
         source: "/api/v1/:path*",
-        destination: `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001/api/v1"}/:path*`,
+        destination: `${process.env.NEXT_PUBLIC_API_URL || "https://march-erasure-fifth.ngrok-free.dev/api/v1"}/:path*`,
       },
     ];
   },
