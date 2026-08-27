@@ -293,6 +293,7 @@ async function request<T>(
   } = options;
 
   const headers = new Headers(fetchOptions.headers);
+  headers.set("ngrok-skip-browser-warning", "true");
 
   if (typeof fetchOptions.body === "string" && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
