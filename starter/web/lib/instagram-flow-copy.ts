@@ -233,6 +233,8 @@ const videoCopy = {
   durationLabels: {
     5: ["5 segundos", "5 seconds", "5 segundos"],
     10: ["10 segundos", "10 seconds", "10 segundos"],
+    16: ["16 segundos", "16 seconds", "16 segundos"],
+    20: ["20 segundos", "20 seconds", "20 segundos"],
   },
   formatHeading: ["Formato", "Format", "Formato"],
   formatLabel: ["Vertical 9:16", "Vertical 9:16", "Vertical 9:16"],

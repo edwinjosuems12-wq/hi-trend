@@ -8,6 +8,7 @@ export const routes = {
   feedback: "/feedback",
   onboarding: "/onboarding",
   dashboard: "/dashboard",
+  trends: "/trends",
   templates: "/templates",
   library: "/library",
   studioNew: "/studio/new",
@@ -18,6 +19,7 @@ export const routes = {
 
 const protectedExactPaths = new Set<string>([
   routes.dashboard,
+  routes.trends,
   routes.templates,
   routes.studioNew,
   routes.settings,

@@ -11,10 +11,15 @@ from app.providers.content import (
 from app.providers.images import (
     DemoImageGenerationProvider,
     ImageGenerationProvider,
+    OpenAIImageGenerationProvider,
     OpenRouterImageGenerationProvider,
 )
 from app.providers.openrouter_catalog import OpenRouterModelCatalog
-from app.providers.video import DemoVideoGenerationProvider, VideoGenerationProvider
+from app.providers.video import (
+    DemoVideoGenerationProvider,
+    OpenAIVideoGenerationProvider,
+    VideoGenerationProvider,
+)
 from app.providers.vision import (
     DemoVisionReviewProvider,
     OpenAICompatibleVisionReviewProvider,
@@ -22,7 +27,9 @@ from app.providers.vision import (
 )
 
 
-def get_content_provider(*, quality_level: QualityLevel = QualityLevel.FAST) -> ContentModelProvider:
+def get_content_provider(
+    *, quality_level: QualityLevel = QualityLevel.FAST
+) -> ContentModelProvider:
     if settings.ai_provider == "demo":
         if settings.app_env == "production":
             raise AppError(
@@ -177,6 +184,25 @@ def get_image_generation_provider(
             model_name=model_name,
             timeout_seconds=settings.image_generation_timeout_seconds,
         )
+    if selected == "openai":
+        model_name = model if model is not None else settings.image_generation_model
+        if (
+            not settings.openai_api_key
+            or not model_name
+            or model_name not in settings.image_generation_allowed_models
+        ):
+            raise AppError(
+                "IMAGE_PROVIDER_UNAVAILABLE",
+                "La generación de imágenes no está configurada.",
+                status_code=503,
+                retryable=False,
+            )
+        return OpenAIImageGenerationProvider(
+            base_url=settings.openai_base_url,
+            api_key=settings.openai_api_key,
+            model_name=model_name,
+            timeout_seconds=settings.image_generation_timeout_seconds,
+        )
     raise AppError(
         "IMAGE_PROVIDER_UNAVAILABLE",
         "El proveedor de imágenes configurado no está disponible.",
@@ -186,10 +212,29 @@ def get_image_generation_provider(
 
 
 def get_video_generation_provider() -> VideoGenerationProvider:
-    """Build the only WAVE-013 provider without ever reaching the network."""
+    """Build the configured asynchronous video provider."""
 
     if settings.video_provider == "demo":
         return DemoVideoGenerationProvider()
+    if settings.video_provider == "openai":
+        if (
+            not settings.openai_api_key
+            or not settings.video_generation_model
+            or settings.video_generation_model not in settings.video_generation_allowed_models
+            or not set(settings.video_generation_allowed_durations).issubset({16, 20})
+        ):
+            raise AppError(
+                "VIDEO_PROVIDER_UNAVAILABLE",
+                "La generación de video no está configurada.",
+                status_code=503,
+                retryable=False,
+            )
+        return OpenAIVideoGenerationProvider(
+            base_url=settings.openai_base_url,
+            api_key=settings.openai_api_key,
+            model_name=settings.video_generation_model,
+            timeout_seconds=settings.video_generation_timeout_seconds,
+        )
     raise RuntimeError("VIDEO_PROVIDER no es compatible.")
 
 

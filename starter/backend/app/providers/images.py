@@ -94,9 +94,7 @@ class DemoImageGenerationProvider:
     model_name = "demo-image-v1"
 
     async def generate(self, *, request: ImageGenerationRequest) -> GeneratedImage:
-        digest = hashlib.sha256(
-            f"{request.prompt}|{request.aspect_ratio}".encode()
-        ).digest()
+        digest = hashlib.sha256(f"{request.prompt}|{request.aspect_ratio}".encode()).digest()
         background = (digest[0] // 2 + 60, digest[1] // 2 + 60, digest[2] // 2 + 60)
         image = Image.new("RGB", (request.width, request.height), background)
         draw = ImageDraw.Draw(image)
@@ -127,6 +125,134 @@ def _encode_png(image: Image.Image) -> bytes:
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     return buffer.getvalue()
+
+
+class OpenAIImageGenerationProvider:
+    """Direct adapter for OpenAI's Images API.
+
+    The adapter deliberately uses the Images API instead of an OpenAI SDK so
+    the provider boundary stays small and the existing HTTP transport can be
+    replaced in tests. GPT Image models return base64 image bytes, which are
+    decoded locally before the application validates and stores them.
+    """
+
+    provider_name = "openai"
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        api_key: str,
+        model_name: str,
+        timeout_seconds: float,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key
+        self.model_name = model_name
+        self._timeout_seconds = timeout_seconds
+        self._transport = transport
+
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._api_key}"}
+
+    @staticmethod
+    def _size(request: ImageGenerationRequest) -> str:
+        return f"{request.width}x{request.height}"
+
+    @staticmethod
+    def _prompt(request: ImageGenerationRequest) -> str:
+        prompt = request.prompt.strip()
+        if request.negative_prompt:
+            prompt = f"{prompt}\n\nEvita en la imagen: {request.negative_prompt.strip()}"
+        return prompt
+
+    async def generate(self, *, request: ImageGenerationRequest) -> GeneratedImage:
+        try:
+            async with httpx.AsyncClient(
+                timeout=self._timeout_seconds, transport=self._transport
+            ) as client:
+                if request.reference_image and request.reference_mime_type:
+                    response = await client.post(
+                        f"{self._base_url}/images/edits",
+                        headers=self._headers(),
+                        data={
+                            "model": self.model_name,
+                            "prompt": self._prompt(request),
+                            "n": "1",
+                            "size": self._size(request),
+                            "output_format": "png",
+                        },
+                        files={
+                            "image": (
+                                "reference-image",
+                                request.reference_image,
+                                request.reference_mime_type,
+                            )
+                        },
+                    )
+                else:
+                    response = await client.post(
+                        f"{self._base_url}/images/generations",
+                        headers={**self._headers(), "Content-Type": "application/json"},
+                        json={
+                            "model": self.model_name,
+                            "prompt": self._prompt(request),
+                            "n": 1,
+                            "size": self._size(request),
+                            "quality": "auto",
+                            "output_format": "png",
+                        },
+                    )
+        except httpx.TimeoutException as exc:
+            raise AppError(
+                "IMAGE_PROVIDER_TIMEOUT",
+                "La generación de imágenes tardó demasiado. Inténtalo nuevamente.",
+                status_code=504,
+                retryable=True,
+            ) from exc
+        except httpx.RequestError as exc:
+            raise AppError(
+                "IMAGE_PROVIDER_UNAVAILABLE",
+                "La generación de imágenes no está disponible en este momento.",
+                status_code=503,
+                retryable=True,
+            ) from exc
+
+        if response.status_code >= 400:
+            raise _map_status_error(response)
+        return self._decode(response)
+
+    def _decode(self, response: httpx.Response) -> GeneratedImage:
+        try:
+            body = response.json()
+            image = body["data"][0]
+            encoded = image["b64_json"]
+            if not isinstance(encoded, str) or not encoded:
+                raise ValueError("missing image")
+            content = base64.b64decode(encoded, validate=True)
+        except (ValueError, KeyError, IndexError, TypeError, binascii.Error) as exc:
+            raise _invalid_response() from exc
+
+        if not content or len(content) > settings.image_generation_max_bytes:
+            raise _invalid_response()
+        usage = body.get("usage") if isinstance(body, dict) else None
+        metadata: dict[str, Any] = {
+            "provider": self.provider_name,
+            "model": self.model_name,
+        }
+        if isinstance(usage, dict):
+            for key in ("input_tokens", "output_tokens", "total_tokens"):
+                value = usage.get(key)
+                if isinstance(value, int):
+                    metadata[key] = value
+        return GeneratedImage(
+            content=content,
+            mime_type="image/png",
+            provider_name=self.provider_name,
+            model=self.model_name,
+            usage_metadata=metadata,
+        )
 
 
 class OpenRouterImageGenerationProvider:
@@ -186,9 +312,7 @@ class OpenRouterImageGenerationProvider:
             content.append(
                 {
                     "type": "image_url",
-                    "image_url": {
-                        "url": f"data:{request.reference_mime_type};base64,{encoded}"
-                    },
+                    "image_url": {"url": f"data:{request.reference_mime_type};base64,{encoded}"},
                 }
             )
         return {

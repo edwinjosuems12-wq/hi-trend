@@ -51,6 +51,18 @@ const EXPECTED_NAV_SETTINGS: Record<AppLocale, string> = {
   pt: "Configurações",
 };
 
+const EXPECTED_NAV_DASHBOARD: Record<AppLocale, string> = {
+  es: "Dashboard",
+  en: "Dashboard",
+  pt: "Dashboard",
+};
+
+const EXPECTED_NAV_TRENDS: Record<AppLocale, string> = {
+  es: "Tendencias",
+  en: "Trends",
+  pt: "Tendências",
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
   window.localStorage.clear();
@@ -99,6 +111,12 @@ describe("primary navigation renders real copy per locale", () => {
       ).toBeInTheDocument();
       expect(
         screen.getAllByText(EXPECTED_NAV_SETTINGS[locale])[0]
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByText(EXPECTED_NAV_DASHBOARD[locale])[0]
+      ).toBeInTheDocument();
+      expect(
+        screen.getAllByText(EXPECTED_NAV_TRENDS[locale])[0]
       ).toBeInTheDocument();
     });
   }
@@ -175,7 +193,7 @@ describe("template surface uses the common catalog", () => {
 });
 
 describe("remaining primary surfaces use persisted interface copy", () => {
-  test("settings loads its persisted English locale and dashboard renders trend copy", async () => {
+  test("settings loads its persisted English locale and trends renders trend copy", async () => {
     vi.spyOn(api.auth, "me").mockResolvedValue({
       user: {
         id: "u",
@@ -210,8 +228,8 @@ describe("remaining primary surfaces use persisted interface copy", () => {
       },
       items: [],
     });
-    const { default: DashboardPage } = await import("@/app/dashboard/page");
-    render(<DashboardPage />);
+    const { default: TrendsPage } = await import("@/app/trends/page");
+    render(<TrendsPage />);
     expect(
       await screen.findByRole("heading", { name: "Signals for your next post" })
     ).toBeInTheDocument();
