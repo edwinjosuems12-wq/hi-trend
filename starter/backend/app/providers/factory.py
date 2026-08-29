@@ -65,15 +65,6 @@ def get_content_provider(
                 status_code=503,
                 retryable=False,
             )
-        # Do not trust a mutated Settings instance: fast is the only route
-        # deliberately guaranteed free in this wave.
-        if settings.openrouter_fast_model != "openrouter/free":
-            raise AppError(
-                "CAPABILITY_UNAVAILABLE",
-                "La ruta rápida de OpenRouter no está configurada como gratuita.",
-                status_code=503,
-                retryable=False,
-            )
         model_by_quality = {
             QualityLevel.FAST: settings.openrouter_fast_model,
             QualityLevel.BALANCED: settings.openrouter_balanced_model,

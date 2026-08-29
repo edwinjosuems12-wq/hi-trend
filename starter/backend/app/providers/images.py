@@ -368,16 +368,16 @@ class OpenRouterImageGenerationProvider:
 
         if response.status_code >= 400:
             raise _map_status_error(response)
-        return self._decode(response)
+        return await self._decode(response)
 
-    def _decode(self, response: httpx.Response) -> GeneratedImage:
+    async def _decode(self, response: httpx.Response) -> GeneratedImage:
         try:
             body = response.json()
             message = body["choices"][0]["message"]
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise _invalid_response() from exc
 
-        content, mime_type = _extract_image(message)
+        content, mime_type = await _extract_image(message)
         usage = body.get("usage") if isinstance(body, dict) else None
         metadata: dict[str, Any] = {
             "provider": self.provider_name,
@@ -399,7 +399,7 @@ class OpenRouterImageGenerationProvider:
         )
 
 
-def _extract_image(message: Any) -> tuple[bytes, str]:
+async def _extract_image(message: Any) -> tuple[bytes, str]:
     if not isinstance(message, dict):
         raise _invalid_response()
     candidates: list[Any] = []
@@ -409,11 +409,44 @@ def _extract_image(message: Any) -> tuple[bytes, str]:
     content = message.get("content")
     if isinstance(content, list):
         candidates.extend(content)
+    
+    # Sometimes OpenRouter returns a markdown image in the text content
+    if isinstance(content, str):
+        # Look for ![alt](url)
+        import re
+        match = re.search(r"!\[.*?\]\((https?://[^\)]+)\)", content)
+        if match:
+            url = match.group(1)
+            return await _download_image_url(url)
+            
     for candidate in candidates:
         url = _candidate_url(candidate)
         if url:
-            return _decode_data_url(url)
+            if url.startswith("data:"):
+                return _decode_data_url(url)
+            elif url.startswith("http"):
+                return await _download_image_url(url)
     raise _invalid_response()
+
+async def _download_image_url(url: str) -> tuple[bytes, str]:
+    if not url.startswith("https://"):
+        raise _invalid_response()
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            
+            content_type = response.headers.get("Content-Type", "").lower()
+            if not content_type.startswith("image/"):
+                raise _invalid_response()
+                
+            content = response.content
+            if len(content) > settings.image_generation_max_bytes * 2:
+                raise _invalid_response()
+                
+            return content, content_type
+    except Exception as exc:
+        raise _invalid_response() from exc
 
 
 def _candidate_url(candidate: Any) -> str | None:
