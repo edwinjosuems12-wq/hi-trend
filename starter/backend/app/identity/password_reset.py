@@ -38,7 +38,7 @@ async def request_password_reset(
     email: str,
     requested_ip: str | None,
     sender: EmailSender | None = None,
-) -> str | None:
+) -> None:
     """Create a one-time link while keeping the response enumeration-safe."""
 
     normalized = email.casefold().strip()
@@ -46,32 +46,8 @@ async def request_password_reset(
         select(User).where(User.email == normalized, User.status == "active").with_for_update()
     )
     if user is None:
-        if settings.app_env in {"development", "test"} or settings.email_provider == "demo":
-            from app.identity.models import Workspace, WorkspaceMember
-            from app.identity.passwords import hash_password
-
-            user_id = f"usr_{secrets.token_hex(8)}"
-            ws_id = f"ws_{secrets.token_hex(8)}"
-            user_name = normalized.split("@")[0].capitalize()
-            user = User(
-                id=user_id,
-                email=normalized,
-                name=user_name,
-                password_hash=hash_password("password12345"),
-                status="active",
-            )
-            workspace = Workspace(id=ws_id, name=f"Workspace de {user_name}")
-            membership = WorkspaceMember(
-                id=f"wsm_{secrets.token_hex(8)}",
-                workspace_id=ws_id,
-                user_id=user_id,
-                role="owner",
-            )
-            db.add_all([user, workspace, membership])
-            await db.flush()
-        else:
-            await db.commit()
-            return None
+        await db.commit()
+        return
 
     now = datetime.now(UTC)
     await db.execute(
@@ -95,7 +71,6 @@ async def request_password_reset(
 
     email_sender = sender or get_email_sender()
     reset_url = f"{settings.password_reset_url}?{urlencode({'token': raw_token})}"
-    logger.info("password_reset_requested email=%s reset_url=%s", normalized, reset_url)
     try:
         await email_sender.send_password_reset(
             recipient=normalized,
@@ -106,8 +81,6 @@ async def request_password_reset(
         # Do not expose provider state or recipient existence. The operations
         # log receives only a stable event, never the URL or token.
         logger.warning("password_reset_delivery_failed provider=%s", email_sender.provider_name)
-
-    return reset_url
 
 
 async def confirm_password_reset(

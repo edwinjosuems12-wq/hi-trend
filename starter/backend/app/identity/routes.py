@@ -441,15 +441,12 @@ async def request_password_reset_endpoint(
 ) -> dict[str, str]:
     """Start recovery without revealing whether the address exists."""
 
-    reset_url = await request_password_reset(
+    await request_password_reset(
         db,
         email=body.email,
         requested_ip=request.client.host if request.client else None,
     )
-    result = {"message": PASSWORD_RESET_MESSAGE}
-    if reset_url and (settings.app_env in {"development", "test"} or settings.email_provider == "demo"):
-        result["dev_reset_url"] = reset_url
-    return result
+    return {"message": PASSWORD_RESET_MESSAGE}
 
 
 @router.post("/password-reset/confirm")
