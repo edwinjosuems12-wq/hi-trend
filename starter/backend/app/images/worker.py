@@ -22,6 +22,7 @@ import contextlib
 import logging
 import signal
 
+from app.db import registry as _registry  # noqa: F401  # maps every table before any query
 from app.db.session import get_session_factory
 from app.images.service import claim_next_job, execute_job
 

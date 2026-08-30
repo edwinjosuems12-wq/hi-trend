@@ -33,6 +33,40 @@ def _rejects_temperature(model_name: str) -> bool:
     )
 
 
+def _to_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Rewrite a Pydantic JSON schema into the subset ``strict`` mode accepts.
+
+    Pydantic leaves a field out of ``required`` when it has a default, and emits
+    the default alongside it. Strict structured output rejects both: every key in
+    ``properties`` must be listed in ``required``, and ``default`` is not part of
+    the supported keyword set. Sending the schema unchanged fails the request with
+    an HTTP 400, so the whole generation dies instead of merely being unvalidated.
+
+    Widening ``required`` costs nothing here because the fields carrying defaults
+    (``artifact_type``, ``assumptions``) are ones the model should always emit
+    anyway; the Pydantic default stays as the fallback when the provider is not
+    running in structured mode. Returns a copy — the caller's schema is untouched.
+    """
+
+    strict: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key == "default":
+            continue
+        if isinstance(value, dict):
+            strict[key] = _to_strict_schema(value)
+        elif isinstance(value, list):
+            strict[key] = [
+                _to_strict_schema(item) if isinstance(item, dict) else item for item in value
+            ]
+        else:
+            strict[key] = value
+
+    if strict.get("type") == "object" and isinstance(strict.get("properties"), dict):
+        strict["required"] = list(strict["properties"])
+        strict["additionalProperties"] = False
+    return strict
+
+
 class ContentModelProvider(Protocol):
     provider_name: str
     model_name: str
@@ -568,7 +602,11 @@ class OpenAICompatibleContentModelProvider:
         if self._structured_output and response_schema is not None:
             return {
                 "type": "json_schema",
-                "json_schema": {"name": "hitrendy_response", "strict": True, "schema": response_schema},
+                "json_schema": {
+                    "name": "hitrendy_response",
+                    "strict": True,
+                    "schema": _to_strict_schema(response_schema),
+                },
             }
         return {"type": "json_object"}
 

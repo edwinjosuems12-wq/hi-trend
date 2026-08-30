@@ -25,6 +25,7 @@
     "restore:drill": "PYTHONPATH=starter/backend python scripts/restore_drill.py",
     "web:test:e2e": "npm run test:e2e -w starter/web",
     "web:test:e2e:beta": "npm run test:e2e -w starter/web -- tests/e2e/beta-readiness.spec.ts",
-    "dev": "npx --yes concurrently \"npm run web:dev\" \"npm run backend:dev\""
+    "images:worker": "cd starter/backend && PYTHONPATH=. python -m app.images.worker --interval 3",
+    "dev": "npx --yes concurrently \"npm run web:dev\" \"npm run backend:dev\" \"npm run images:worker\""
   }
 }

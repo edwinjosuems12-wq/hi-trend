@@ -723,6 +723,88 @@ async def test_provider_rejects_a_response_without_an_image() -> None:
 
 
 @pytest.mark.asyncio
+async def test_remote_image_url_is_downloaded_through_the_injected_transport(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A model-provided https URL is resolved, checked, then fetched with the
+    provider's own (mockable) transport rather than a separate live client."""
+
+    import socket as socket_module
+
+    from app.providers import images as images_module
+
+    def fake_getaddrinfo(host: str, port: object) -> list[tuple]:
+        assert host == "cdn.example.test"
+        return [(socket_module.AF_INET, socket_module.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(images_module.socket, "getaddrinfo", fake_getaddrinfo)
+
+    image_bytes = _png()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "cdn.example.test":
+            return httpx.Response(
+                200, headers={"content-type": "image/png"}, content=image_bytes
+            )
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "images": [
+                                {"image_url": {"url": "https://cdn.example.test/i.png"}}
+                            ]
+                        }
+                    }
+                ]
+            },
+        )
+
+    generated = await _mock_openrouter(handler).generate(request=_image_request())
+    assert generated.content == image_bytes
+    assert generated.mime_type == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_remote_image_url_resolving_to_a_private_ip_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A URL whose host resolves to a private/loopback address must never be
+    fetched, even if the model that returned it is otherwise trusted."""
+
+    import socket as socket_module
+
+    from app.providers import images as images_module
+
+    def fake_getaddrinfo(host: str, port: object) -> list[tuple]:
+        assert host == "internal.example.test"
+        return [(socket_module.AF_INET, socket_module.SOCK_STREAM, 6, "", ("127.0.0.1", 0))]
+
+    monkeypatch.setattr(images_module.socket, "getaddrinfo", fake_getaddrinfo)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "images": [
+                                {"image_url": {"url": "https://internal.example.test/i.png"}}
+                            ]
+                        }
+                    }
+                ]
+            },
+        )
+
+    with pytest.raises(AppError) as excinfo:
+        await _mock_openrouter(handler).generate(request=_image_request())
+    assert excinfo.value.code == "IMAGE_PROVIDER_INVALID_RESPONSE"
+
+
+@pytest.mark.asyncio
 async def test_oversized_images_are_refused_before_decoding_and_after(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

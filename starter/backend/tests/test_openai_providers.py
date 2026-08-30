@@ -15,6 +15,7 @@ from app.providers.images import (
     ASPECT_RATIOS,
     ImageGenerationRequest,
     OpenAIImageGenerationProvider,
+    _nearest_supported_size,
 )
 from app.providers.video import (
     OpenAIVideoGenerationProvider,
@@ -24,9 +25,9 @@ from app.providers.video import (
 OPENAI_KEY = "sk-test-key-never-real"
 
 
-def _png() -> bytes:
+def _png(size: tuple[int, int] = (12, 12)) -> bytes:
     buffer = io.BytesIO()
-    Image.new("RGB", (12, 12), (20, 120, 80)).save(buffer, format="PNG")
+    Image.new("RGB", size, (20, 120, 80)).save(buffer, format="PNG")
     return buffer.getvalue()
 
 
@@ -34,7 +35,10 @@ def _png() -> bytes:
 async def test_openai_image_provider_sends_images_api_payload_and_decodes_base64(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    generated = _png()
+    # GPT Image renders only its own three frames, so the adapter asks for the
+    # closest one (1024x1536) and trims the answer down to the 4:5 the caller
+    # approved. The stub therefore answers in the native frame, not in 4:5.
+    generated = _png((1024, 1536))
     captured: dict[str, object] = {}
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -65,15 +69,31 @@ async def test_openai_image_provider_sends_images_api_payload_and_decodes_base64
         )
     )
 
-    assert result.content == generated
+    delivered = Image.open(io.BytesIO(result.content))
+    assert (delivered.width, delivered.height) == (width, height)
     assert result.mime_type == "image/png"
     assert result.provider_name == "openai"
     assert captured["authorization"] == f"Bearer {OPENAI_KEY}"
     payload = captured["body"]
     assert isinstance(payload, dict)
     assert payload["model"] == "gpt-image-2"
-    assert payload["size"] == "1024x1280"
+    # Asking for 1024x1280 is an HTTP 400: it is not one of the supported sizes.
+    assert payload["size"] == "1024x1536"
     assert "Evita en la imagen: texto ilegible" in payload["prompt"]
+
+
+def test_every_product_ratio_maps_to_a_frame_gpt_image_accepts() -> None:
+    """A product ratio the adapter cannot translate is an HTTP 400 per request.
+
+    The three sizes below are the whole set GPT Image supports. Adding a ratio to
+    ASPECT_RATIOS without checking this is how image generation breaks silently
+    for one format while the others keep working.
+    """
+
+    supported = {"1024x1024", "1024x1536", "1536x1024"}
+    for width, height in ASPECT_RATIOS.values():
+        mapped = _nearest_supported_size(width, height)
+        assert f"{mapped[0]}x{mapped[1]}" in supported
 
 
 @pytest.mark.asyncio

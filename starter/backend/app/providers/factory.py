@@ -56,12 +56,26 @@ def get_content_provider(
             retry_base_seconds=settings.ai_retry_base_seconds,
             http_referer=settings.ai_http_referer,
             app_title=settings.ai_app_title,
+            # The domain contract forbids extra keys and constrains every field,
+            # which plain JSON mode cannot guarantee: the model free-forms a shape
+            # that fails validation and the request dies as GENERATION_CONTRACT_INVALID.
+            # Schema-constrained decoding makes the provider produce the contract.
+            structured_output=True,
         )
     if settings.ai_provider == "openrouter":
         if not settings.openrouter_api_key or not settings.openrouter_fast_model:
             raise AppError(
                 "GENERATION_PROVIDER_UNAVAILABLE",
                 "La configuración del proveedor de contenido no está disponible.",
+                status_code=503,
+                retryable=False,
+            )
+        # Do not trust a mutated Settings instance: fast is the only route
+        # deliberately guaranteed free in this wave.
+        if settings.openrouter_fast_model != "openrouter/free":
+            raise AppError(
+                "CAPABILITY_UNAVAILABLE",
+                "La ruta rápida de OpenRouter no está configurada como gratuita.",
                 status_code=503,
                 retryable=False,
             )

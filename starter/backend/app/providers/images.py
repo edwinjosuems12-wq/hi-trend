@@ -16,7 +16,10 @@ import asyncio
 import base64
 import binascii
 import hashlib
-from dataclasses import dataclass, field
+import ipaddress
+import re
+import socket
+from dataclasses import dataclass, field, replace
 from typing import Any, Protocol
 
 import httpx
@@ -127,6 +130,52 @@ def _encode_png(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
+# GPT Image models accept only these three frames; anything else is a hard 400.
+# The product ratios in ASPECT_RATIOS (4:5, 9:16) are not among them, so the
+# adapter renders in the closest native frame and crops down to the requested
+# proportion. Cropping never invents pixels, which is why no upscaling path
+# exists here: a smaller image in the right shape beats a resampled one.
+_OPENAI_IMAGE_SIZES: tuple[tuple[int, int], ...] = ((1024, 1024), (1024, 1536), (1536, 1024))
+
+
+def _nearest_supported_size(width: int, height: int) -> tuple[int, int]:
+    """Pick the native frame whose proportion is closest to the requested one."""
+
+    target = width / height
+    return min(_OPENAI_IMAGE_SIZES, key=lambda size: abs(size[0] / size[1] - target))
+
+
+def _crop_to_ratio(content: bytes, *, width: int, height: int) -> bytes:
+    """Center-crop rendered bytes to the requested proportion.
+
+    The application rejects an image whose shape is not the shape the user
+    approved, so a 2:3 render answering a 4:5 job has to be trimmed before it
+    reaches storage. Returns the input untouched when it already matches, so a
+    square job pays no re-encoding cost.
+    """
+
+    from io import BytesIO
+
+    target = width / height
+    try:
+        image = Image.open(BytesIO(content))
+        image.load()
+    except (OSError, ValueError):  # pragma: no cover - the caller validates too
+        return content
+
+    actual = image.width / image.height
+    if abs(actual - target) <= target * 0.01:
+        return content
+
+    if actual > target:
+        new_width, new_height = round(image.height * target), image.height
+    else:
+        new_width, new_height = image.width, round(image.width / target)
+    left = (image.width - new_width) // 2
+    top = (image.height - new_height) // 2
+    return _encode_png(image.crop((left, top, left + new_width, top + new_height)))
+
+
 class OpenAIImageGenerationProvider:
     """Direct adapter for OpenAI's Images API.
 
@@ -158,7 +207,8 @@ class OpenAIImageGenerationProvider:
 
     @staticmethod
     def _size(request: ImageGenerationRequest) -> str:
-        return f"{request.width}x{request.height}"
+        width, height = _nearest_supported_size(request.width, request.height)
+        return f"{width}x{height}"
 
     @staticmethod
     def _prompt(request: ImageGenerationRequest) -> str:
@@ -221,7 +271,11 @@ class OpenAIImageGenerationProvider:
 
         if response.status_code >= 400:
             raise _map_status_error(response)
-        return self._decode(response)
+        generated = self._decode(response)
+        cropped = _crop_to_ratio(generated.content, width=request.width, height=request.height)
+        if cropped is generated.content:
+            return generated
+        return replace(generated, content=cropped)
 
     def _decode(self, response: httpx.Response) -> GeneratedImage:
         try:
@@ -377,7 +431,7 @@ class OpenRouterImageGenerationProvider:
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise _invalid_response() from exc
 
-        content, mime_type = await _extract_image(message)
+        content, mime_type = await _extract_image(message, transport=self._transport)
         usage = body.get("usage") if isinstance(body, dict) else None
         metadata: dict[str, Any] = {
             "provider": self.provider_name,
@@ -399,7 +453,10 @@ class OpenRouterImageGenerationProvider:
         )
 
 
-async def _extract_image(message: Any) -> tuple[bytes, str]:
+_MARKDOWN_IMAGE_PATTERN = re.compile(r"!\[[^\]]*\]\((https://[^)\s]+)\)")
+
+
+async def _extract_image(message: Any, *, transport: httpx.BaseTransport | None = None) -> tuple[bytes, str]:
     if not isinstance(message, dict):
         raise _invalid_response()
     candidates: list[Any] = []
@@ -409,44 +466,81 @@ async def _extract_image(message: Any) -> tuple[bytes, str]:
     content = message.get("content")
     if isinstance(content, list):
         candidates.extend(content)
-    
-    # Sometimes OpenRouter returns a markdown image in the text content
-    if isinstance(content, str):
-        # Look for ![alt](url)
-        import re
-        match = re.search(r"!\[.*?\]\((https?://[^\)]+)\)", content)
+    elif isinstance(content, str):
+        # Some models answer with a markdown image link inside the text part
+        # instead of a structured ``images``/``content`` entry.
+        match = _MARKDOWN_IMAGE_PATTERN.search(content)
         if match:
-            url = match.group(1)
-            return await _download_image_url(url)
-            
+            return await _download_image_url(match.group(1), transport=transport)
     for candidate in candidates:
         url = _candidate_url(candidate)
         if url:
             if url.startswith("data:"):
                 return _decode_data_url(url)
-            elif url.startswith("http"):
-                return await _download_image_url(url)
+            if url.startswith("https://"):
+                return await _download_image_url(url, transport=transport)
     raise _invalid_response()
 
-async def _download_image_url(url: str) -> tuple[bytes, str]:
-    if not url.startswith("https://"):
+
+async def _download_image_url(
+    url: str, *, transport: httpx.BaseTransport | None = None
+) -> tuple[bytes, str]:
+    """Fetch a remote image a model pointed us at, never trusting the target.
+
+    ``_decode_data_url`` exists because a remote fetch is normally out of
+    bounds here: this is the one exception, needed because some OpenRouter
+    models answer with a link instead of inline bytes. The host is resolved
+    and checked before any connection is made, redirects are refused (a
+    redirect would bypass that check), and the reply must announce one of the
+    same three image types the inline path accepts.
+    """
+
+    parsed = httpx.URL(url)
+    if parsed.scheme != "https" or not parsed.host:
         raise _invalid_response()
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            
-            content_type = response.headers.get("Content-Type", "").lower()
-            if not content_type.startswith("image/"):
-                raise _invalid_response()
-                
-            content = response.content
-            if len(content) > settings.image_generation_max_bytes * 2:
-                raise _invalid_response()
-                
-            return content, content_type
-    except Exception as exc:
+        addresses = {
+            info[4][0] for info in await asyncio.to_thread(socket.getaddrinfo, parsed.host, None)
+        }
+    except OSError as exc:
         raise _invalid_response() from exc
+    if not addresses or not all(_is_public_ip(address) for address in addresses):
+        raise _invalid_response()
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=30.0, follow_redirects=False, transport=transport
+        ) as client:
+            response = await client.get(url)
+    except httpx.RequestError as exc:
+        raise _invalid_response() from exc
+    if response.status_code != 200:
+        raise _invalid_response()
+
+    mime_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if mime_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise _invalid_response()
+    content = response.content
+    if not content or len(content) > settings.image_generation_max_bytes:
+        raise _invalid_response()
+    return content, mime_type
+
+
+def _is_public_ip(value: str) -> bool:
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return not any(
+        (
+            address.is_private,
+            address.is_loopback,
+            address.is_link_local,
+            address.is_multicast,
+            address.is_reserved,
+            address.is_unspecified,
+        )
+    )
 
 
 def _candidate_url(candidate: Any) -> str | None:
@@ -462,7 +556,8 @@ def _candidate_url(candidate: Any) -> str | None:
 
 
 def _decode_data_url(url: str) -> tuple[bytes, str]:
-    """Accept only inline data URLs: a remote URL would be an unvalidated fetch."""
+    """Decode an inline ``data:`` URL. A remote URL goes through ``_download_image_url``,
+    which validates the target before fetching it."""
 
     prefix = "data:"
     marker = ";base64,"
