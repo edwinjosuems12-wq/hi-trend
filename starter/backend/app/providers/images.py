@@ -636,27 +636,6 @@ async def _download_image_url(
     if not content or len(content) > settings.image_generation_max_bytes:
         raise _invalid_response()
     return content, mime_type
-        raise _invalid_response() from exc
-    if not addresses or not all(_is_public_ip(address) for address in addresses):
-        raise _invalid_response()
-
-    try:
-        async with httpx.AsyncClient(
-            timeout=30.0, follow_redirects=False, transport=transport
-        ) as client:
-            response = await client.get(url)
-    except httpx.RequestError as exc:
-        raise _invalid_response() from exc
-    if response.status_code != 200:
-        raise _invalid_response()
-
-    mime_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-    if mime_type not in {"image/jpeg", "image/png", "image/webp"}:
-        raise _invalid_response()
-    content = response.content
-    if not content or len(content) > settings.image_generation_max_bytes:
-        raise _invalid_response()
-    return content, mime_type
 
 
 def _is_public_ip(value: str) -> bool:

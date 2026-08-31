@@ -248,7 +248,6 @@ def _normalize_advice_payload(raw: Any, request: AdvisorModelRequest) -> dict:
     if "__provider_metadata" in raw:
         result["__provider_metadata"] = raw["__provider_metadata"]
     return result
->>>>>>> 5f8906a (feat: optimizaciones de chat studio, plantillas canva dinamicas y collage quienes somos)
 
 
 class ContentModelProvider(Protocol):
