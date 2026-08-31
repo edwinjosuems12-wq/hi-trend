@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
@@ -368,6 +369,110 @@ class DemoContentModelProvider:
         }
         return calls_to_action.get(locale, calls_to_action["es"])[objective]
 
+def _extract_prompt_entities(user_request: str, default_biz: Any) -> tuple[str, str, str, bool]:
+    text = user_request.strip()
+    text_lower = text.lower()
+
+    brand = getattr(default_biz, "name", "Tu Negocio")
+    product = getattr(default_biz, "primary_product", "Servicios y Productos")
+    category = getattr(default_biz, "category", "Comercio")
+    wants_colors = bool(re.search(r"(?:color|esquema|paleta|tonos|hex|diseño)", text_lower))
+
+    # 1. Look for brand after "llamada", "llamado", "marca", "nombre"
+    m_brand = re.search(
+        r"(?:llamada|llamado|marca|nombre)\s+([A-Za-z0-9áéíóúÁÉÍÓÚñÑ\s]+?)(?:,|\.|$|\s+dame|\s+con|\s+para|\s+y\s+)",
+        text,
+        re.IGNORECASE,
+    )
+    if m_brand:
+        found_brand = m_brand.group(1).strip()
+        if len(found_brand) >= 2:
+            brand = found_brand.title()
+
+    # 2. Look for product / niche
+    m_prod = re.search(
+        r"(?:empresa de|negocio de|diseño para mi empresa de|diseño para|post sobre|post de|para mi empresa de|sobre)\s+([A-Za-z0-9áéíóúÁÉÍÓÚñÑ\s]+?)(?:llamada|llamado|con|\.|\,|$|\s+dame|\s+en\s+)",
+        text,
+        re.IGNORECASE,
+    )
+    if m_prod:
+        found_prod = m_prod.group(1).strip()
+        if len(found_prod) >= 3 and not found_prod.lower().startswith("mi "):
+            product = found_prod
+
+    return brand, product, category, wants_colors
+
+
+class DemoContentModelProvider:
+    provider_name = "demo"
+    model_name = "demo-v1"
+
+    async def generate_advice(self, *, request: AdvisorModelRequest) -> dict:
+        brand, product, category, _ = _extract_prompt_entities(request.user_request, request.business)
+        language = {
+            "en": (
+                f"Strategic focus for {brand}",
+                f"Highlight your {product}",
+                f"Connect with your ideal audience for {product}",
+                f"Launch a promotional Canva post featuring {product}.",
+            ),
+            "pt": (
+                f"Foco estratégico para {brand}",
+                f"Destaque seu {product}",
+                f"Conecte com seu público para {product}",
+                f"Lance uma publicação promocional no Canva destacando {product}.",
+            ),
+            "es": (
+                f"Enfoque estratégico para {brand}",
+                f"Destaca tus {product}",
+                f"Conecta con tus clientes ideales amantes de {product}",
+                f"Crea una publicación promocional en Canva destacando {product}.",
+            ),
+        }.get(request.locale, (
+            f"Enfoque estratégico para {brand}",
+            f"Destaca tus {product}",
+            f"Conecta con tus clientes ideales amantes de {product}",
+            f"Crea una publicación promocional en Canva destacando {product}.",
+        ))
+        return {
+            "summary": language[0],
+            "recommendations": [{"title": language[1], "description": language[2], "priority": "high"}],
+            "next_actions": [language[3]],
+        }
+
+    @staticmethod
+    def _call_to_action(objective: str, locale: str = "es") -> str:
+        calls_to_action = {
+            "es": {
+                "reach": "Compártelo con alguien que disfrutaría conocerlo.",
+                "engagement": "Cuéntanos qué te parece en los comentarios.",
+                "sales": "¡Escríbenos o visítanos hoy para hacer tu pedido!",
+                "store_visits": "¡Visítanos hoy mismo en nuestro local!",
+                "launch": "Descúbrelo desde hoy y sé de los primeros en probarlo.",
+                "brand_awareness": "Síguenos para no perderte ninguna de nuestras novedades.",
+                "community": "Únete a nuestra comunidad y comparte tu experiencia con nosotros.",
+            },
+            "en": {
+                "reach": "Share it with someone who would love to discover it.",
+                "engagement": "Tell us what you think in the comments.",
+                "sales": "Message us to check availability or order now!",
+                "store_visits": "Visit us and discover it in person today.",
+                "launch": "Discover it from launch day.",
+                "brand_awareness": "Follow us to learn more about our offer.",
+                "community": "Join the conversation and share your experience.",
+            },
+            "pt": {
+                "reach": "Compartilhe com alguém que gostaria de conhecer.",
+                "engagement": "Conte para nós o que você acha nos comentários.",
+                "sales": "Envie uma mensagem para saber a disponibilidade e pedir!",
+                "store_visits": "Visite-nos e conheça pessoalmente hoje.",
+                "launch": "Conheça desde o lançamento.",
+                "brand_awareness": "Siga-nos para saber mais sobre nossa proposta.",
+                "community": "Participe da conversa e compartilhe sua experiência.",
+            },
+        }
+        return calls_to_action.get(locale, calls_to_action["es"])[objective]
+
     async def generate_social_post(
         self,
         *,
@@ -379,101 +484,65 @@ class DemoContentModelProvider:
         objective = request.objective
         text_lower = request.user_request.lower()
         cta = self._call_to_action(objective, request.locale)
-        hook = f"Una nueva idea de {context.name} para ti ✨"
+
+        brand, product, category, wants_colors = _extract_prompt_entities(request.user_request, context)
+
+        # Detect specific product palette
+        is_food = any(w in product.lower() or w in brand.lower() for w in ["taco", "birria", "comida", "restaurante", "cafe", "café", "pizza", "burger", "baleada", "postre", "panaderia"])
+        if is_food:
+            palette_desc = "Paleta sugerida: Rojo Pasión (#D9381E), Amarillo Mostaza (#F4B41A), Verde Aguacate (#2ECC71), Crema Cálido (#FFFDF9) y Carbón (#2C3E50)."
+        else:
+            palette_desc = "Paleta sugerida: Azul Índigo (#2B4C7E), Púrpura Eléctrico (#7C3AED), Blanco Puro (#FFFFFF) y Gris Grafito (#1E293B)."
+
+        hook = f"¿Buscando los mejores {product}? ¡Conoce {brand}! 🔥✨"
         caption = (
-            f"En {context.name} queremos presentarte {context.primary_product}. "
-            f"Una propuesta pensada para {context.target_audience.lower()} en {context.city}. {cta}"
+            f"¡El auténtico sabor y calidad que estabas esperando! En {brand} preparamos {product} con dedicación, "
+            f"los mejores ingredientes y una experiencia inigualable. {cta}"
         )
-        visual = "Usa una imagen clara del producto, poco texto y una acción principal visible."
-        preferred = next(
-            (
-                word for word in context.preferred_words
-                if word.casefold() not in {forbidden.casefold() for forbidden in context.forbidden_words}
-            ),
-            None,
+        visual = (
+            f"Brief visual 4:5 para Canva: Fotografía en plano medio de {product} con iluminación cálida y apetitosa. "
+            f"Titular principal: '{brand} — Auténtico Sabor'. {palette_desc} Botón de llamado a la acción destacado en contraste."
         )
+
         if "más corto" in text_lower or "shorter" in text_lower:
-            caption = (
-                f"{context.primary_product} de {context.name}. "
-                f"Pensado para ti en {context.city}. {cta}"
-            )
-            hook = f"{context.primary_product} ✨"
-            visual = "Imagen del producto con texto mínimo."
-        if (
-            "más juvenil" in text_lower
-            or "more youthful" in text_lower
-            or "more_youthful" in text_lower
-        ):
+            caption = f"{product} auténticos de {brand}. ¡Sabor y calidad en cada detalle! {cta}"
+            hook = f"Lo mejor en {product}: {brand} ✨"
+            visual = f"Imagen limpia de {product} con texto mínimo y logotipo de {brand}."
+
+        if "más juvenil" in text_lower or "more youthful" in text_lower:
             tone = "youthful"
-            hook = f"Tu próximo favorito: {context.primary_product} 🔥"
-            caption = (
-                f"Atención {context.target_audience.lower()} 🔥 "
-                f"{context.name} trae {context.primary_product}. "
-                f"{cta} No te lo pierdas."
-            )
-        if request.locale == "en":
-            hook = f"Discover {context.primary_product} with {context.name}"
-            caption = f"{context.name} presents {context.primary_product} for {context.target_audience.lower()}. {cta}"
-            visual = "Use a clear product image with minimal text."
-        elif request.locale == "pt":
-            hook = f"Conheça {context.primary_product} com {context.name}"
-            caption = f"{context.name} apresenta {context.primary_product} para {context.target_audience.lower()}. {cta}"
-            visual = "Use uma imagem clara do produto com pouco texto."
-        if preferred:
-            caption = f"{caption} {preferred}"
-        if (
-            "más profesional" in text_lower
-            or "more professional" in text_lower
-            or "more_professional" in text_lower
-        ):
+            hook = f"Tu próximo plan favorito: {product} en {brand} 🔥🌮"
+            caption = f"¡Alerta de antojo! 🔥 En {brand} tenemos {product} a otro nivel. {cta} Etiqueta a la persona que te va a acompañar 👇"
+
+        if "más profesional" in text_lower or "more professional" in text_lower:
             tone = "professional"
-            if request.locale == "en":
-                hook = f"{context.primary_product} — {context.name}"
-                caption = f"{context.name} presents {context.primary_product}, thoughtfully selected for {context.target_audience.lower()} in {context.city}. {cta}"
-            elif request.locale == "pt":
-                hook = f"{context.primary_product} — {context.name}"
-                caption = f"{context.name} apresenta {context.primary_product}, cuidadosamente selecionado para {context.target_audience.lower()} em {context.city}. {cta}"
-            else:
-                hook = f"{context.primary_product} — {context.name}"
-                caption = f"{context.name} presenta {context.primary_product}. Una propuesta cuidadosamente seleccionada para {context.target_audience.lower()} en {context.city}. {cta}"
-        if (
-            "más amigable" in text_lower
-            or "more friendly" in text_lower
-            or "more_friendly" in text_lower
-        ):
+            hook = f"Excelencia y tradición: {product} por {brand}"
+            caption = f"En {brand} ofrecemos {product} preparados con los más altos estándares de calidad y sabor. {cta}"
+
+        if "más amigable" in text_lower or "more friendly" in text_lower:
             tone = "friendly"
-            if request.locale == "en":
-                hook = "We have something special for you! 🎉"
-                caption = f"Hi! {context.name} has {context.primary_product} you will love, made for {context.target_audience.lower()}. {cta}"
-            elif request.locale == "pt":
-                hook = "Temos algo especial para você! 🎉"
-                caption = f"Olá! {context.name} tem {context.primary_product} que você vai adorar, pensado para {context.target_audience.lower()}. {cta}"
-            else:
-                hook = "¡Tenemos algo especial para ti! 🎉"
-                caption = f"¡Hola! En {context.name} tenemos {context.primary_product} que te encantará. Está pensado para {context.target_audience.lower()} como tú. {cta} Te esperamos."
-        if platform == "instagram":
-            visual = {
-                "en": f"4:5 vertical visual brief for Canva: centered {context.primary_product}, clean editorial style, suggested text ‘{context.name}’, generous margins and one clear action.",
-                "pt": f"Brief visual vertical 4:5 para Canva: {context.primary_product} centralizado, estilo editorial limpo, texto sugerido ‘{context.name}’, margens generosas e uma ação clara.",
-                "es": f"Brief visual vertical 4:5 para Canva: {context.primary_product} centrado, estilo editorial limpio, texto sugerido ‘{context.name}’, márgenes amplios y una acción clara.",
-            }[request.locale]
-        localized = {
-            "en": ("#HiTrendy", "#BusinessContent", f"The {tone} tone from the profile or request was used."),
-            "pt": ("#HiTrendy", "#ConteudoParaNegocios", f"Foi usado o tom {tone} do perfil ou da solicitação."),
-            "es": ("#HiTrendy", "#ContenidoParaNegocios", f"Se utilizó el tono {tone} del perfil o la solicitud."),
-        }[request.locale]
+            hook = f"¡Tenemos algo delicioso esperándote en {brand}! 🎉"
+            caption = f"¡Hola! En {brand} preparamos {product} pensados especialmente para consentirte. {cta} ¡Te esperamos con los brazos abiertos!"
+
+        clean_brand = "".join(c for c in brand if c.isalnum())
+        clean_prod = "".join(c for c in product if c.isalnum())
+        hashtags = [f"#{clean_brand}" if clean_brand else "#HiTrendy", f"#{clean_prod}" if clean_prod else "#NegocioLocal", "#SaborUnico", "#CalidadGarantizada"]
+
+        assumptions = [
+            f"Se adaptó la propuesta al negocio '{brand}' y producto '{product}'.",
+            f"Se aplicó el tono {tone} y se incluyó el esquema de colores correspondiente.",
+        ]
+
         return {
             "artifact_type": "social_post",
             "platform": platform,
-            "hook": hook,
-            "caption": caption,
-            "call_to_action": cta,
-            "hashtags": [localized[0], localized[1]],
-            "visual_direction": visual,
-            "format_recommendation": "reel"
-            if platform in {"instagram", "tiktok"}
-            else "static_post",
-            "assumptions": [localized[2]],
+            "hook": hook[:140],
+            "caption": caption[:2200],
+            "call_to_action": cta[:240],
+            "hashtags": hashtags[:5],
+            "visual_direction": visual[:700],
+            "format_recommendation": "reel" if platform in {"instagram", "tiktok"} else "static_post",
+            "assumptions": assumptions[:10],
         }
 
     async def repair_social_post(

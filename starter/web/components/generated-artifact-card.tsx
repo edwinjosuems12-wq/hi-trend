@@ -122,6 +122,15 @@ export function GeneratedArtifactCard({
     }
   }
 
+  const canvaSearchTerms = artifact.hashtags
+    .filter((h) => !h.toLowerCase().includes("hitrendy") && !h.toLowerCase().includes("contenidoparanegocios"))
+    .map((h) => h.replace(/^#/, ""))
+    .join(" ") || artifact.hook.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s]/g, "");
+
+  const canvaUrl = `https://www.canva.com/templates/?query=${encodeURIComponent(
+    `post instagram ${canvaSearchTerms || "negocio promocion"}`
+  )}`;
+
   return (
     <article className="artifact-card" aria-labelledby={titleId}>
       <p className="eyebrow">PROPUESTA GENERADA</p>
@@ -149,7 +158,7 @@ export function GeneratedArtifactCard({
             <span>🎨</span> Plantilla Canva Recomendada
           </h3>
           <a
-            href="https://canva.link/jxr6r3xdtdx3p18"
+            href={canvaUrl}
             target="_blank"
             rel="noreferrer"
             style={{
