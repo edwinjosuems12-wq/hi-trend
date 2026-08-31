@@ -21,6 +21,11 @@ import asyncio
 import contextlib
 import logging
 import signal
+import sys
+
+if sys.platform.startswith("win"):
+    with contextlib.suppress(Exception):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from app.db import registry as _registry  # noqa: F401  # maps every table before any query
 from app.db.session import get_session_factory
