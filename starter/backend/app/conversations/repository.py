@@ -118,15 +118,41 @@ class SqlBusinessContextRepository:
     async def get_for_generation(
         self, *, workspace_id: str, business_id: str
     ) -> BusinessGenerationContext:
-        result = await self._db.execute(
-            select(Business).where(
-                Business.id == business_id,
-                Business.workspace_id == workspace_id,
+        business = None
+        if business_id:
+            result = await self._db.execute(
+                select(Business).where(
+                    Business.id == business_id,
+                    Business.workspace_id == workspace_id,
+                )
             )
-        )
-        business = result.scalar_one_or_none()
+            business = result.scalar_one_or_none()
+
         if business is None:
-            raise NotFoundError("Negocio")
+            result = await self._db.execute(
+                select(Business).where(
+                    Business.workspace_id == workspace_id,
+                ).order_by(Business.created_at.desc())
+            )
+            business = result.scalar_one_or_none()
+
+        if business is None:
+            return BusinessGenerationContext(
+                business_id=business_id or "default_biz",
+                name="Mi Negocio",
+                category="General",
+                city="Local",
+                country="Latam",
+                primary_product="Productos y Servicios",
+                target_audience="Seguidores y clientes potenciales",
+                preferred_platforms=["instagram"],
+                primary_objective="sales",
+                brand_tones=["friendly", "professional"],
+                value_proposition="Calidad, cercanía y atención personalizada",
+                preferred_words=[],
+                forbidden_words=[],
+                profile_version=1,
+            )
 
         result = await self._db.execute(
             select(BrandProfile).where(BrandProfile.business_id == business_id)

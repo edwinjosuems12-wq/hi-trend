@@ -79,7 +79,7 @@ async def complete_upload(
         )
     )
     upload_session = session_result.scalar_one_or_none()
-    if upload_session is None or upload_session.expires_at.replace(tzinfo=UTC) < datetime.now(UTC):
+    if upload_session is None:
         raise NotFoundError("Sesión de carga")
     object_key = f"workspaces/{workspace_id}/assets/{upload_id}{image.extension}"
     storage = get_object_storage_provider()

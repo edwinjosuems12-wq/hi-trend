@@ -29,7 +29,9 @@ class SocialPostEvaluator:
         if contains_forbidden_word(rendered, forbidden):
             issues.append("El contenido incluye un término prohibido por la marca.")
         if re.search(r"(?:\$|l\.?|hnl|usd)\s*\d|\d+\s*%", rendered, flags=re.IGNORECASE):
-            issues.append("El contenido incluye un precio o descuento no confirmado.")
+            user_prompt_case = request.user_request.casefold()
+            if not re.search(r"(?:\$|l\.?|hnl|usd)\s*\d|\d+\s*%", user_prompt_case, flags=re.IGNORECASE):
+                issues.append("El contenido incluye un precio o descuento no confirmado.")
         if re.search(
             r"\b(garantizado|garantizada|resultados garantizados|100% efectivo)\b",
             rendered,

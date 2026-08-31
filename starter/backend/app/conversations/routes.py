@@ -34,7 +34,7 @@ from app.conversations.repository import (
     list_conversations,
 )
 from app.core.capabilities import Capability, CapabilityRegistry, QualityLevel
-from app.core.errors import NotFoundError, ValidationError_
+from app.core.errors import AppError, NotFoundError, ValidationError_
 from app.dependencies import CurrentPrincipal, get_current_principal, get_db, require_workspace
 from app.domain.models import (
     GeneratedShortVideoScript,
@@ -48,13 +48,14 @@ from app.domain.models import (
 )
 from app.providers.factory import get_content_provider
 from app.services.ai_usage import outcome_for_error, record_usage
+from app.services.generate_advice import GenerateAdviceService
 from app.services.generate_short_video_script import GenerateShortVideoScriptService
 from app.services.generate_social_post import GenerateSocialPostService
 from app.services.usage_policy import ensure_generation_allowed
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 SupportedGenerationIntent = Literal[
-    "create_social_post", "create_short_video_script", "analyze_visual"
+    "create_social_post", "create_short_video_script", "analyze_visual", "ask_advisor"
 ]
 
 
@@ -281,12 +282,20 @@ async def send_message_endpoint(
     if conversation.status != "active":
         raise ValidationError_("Restaura la conversación antes de enviar un mensaje.")
     intent: SupportedGenerationIntent
-    if body.ui_intent in (None, "create_social_post"):
-        intent = "create_social_post"
-    elif body.ui_intent == "create_short_video_script":
-        intent = "create_short_video_script"
-    elif body.ui_intent == "analyze_visual":
+    text_lower = body.text.lower()
+    if body.ui_intent is not None and body.ui_intent not in (
+        "create_social_post", "create_short_video_script", "analyze_visual", "ask_advisor"
+    ):
+        raise ValidationError_("Esta acción todavía no está disponible en el asistente.")
+
+    if body.ui_intent == "analyze_visual":
         intent = "analyze_visual"
+    elif body.ui_intent == "create_short_video_script" or (body.ui_intent in (None, "create_social_post") and any(w in text_lower for w in ["reel", "tiktok", "guion", "script", "video corto"])):
+        intent = "create_short_video_script"
+    elif body.ui_intent == "ask_advisor" or (body.ui_intent in (None, "create_social_post") and any(w in text_lower for w in ["planear", "plan", "consejo", "ideas", "estrategia", "recomiendame", "¿cómo", "¿a qué", "ayuda", "recomiendas"])):
+        intent = "ask_advisor"
+    elif body.ui_intent in (None, "create_social_post"):
+        intent = "create_social_post"
     else:
         raise ValidationError_("Esta acción todavía no está disponible en el asistente.")
     if intent == "analyze_visual" and len(body.attachment_ids) != 1:
@@ -365,6 +374,53 @@ async def send_message_endpoint(
                         "content": analysis.summary,
                     },
                     "analysis": analysis_data,
+                },
+            )
+
+        if intent == "ask_advisor":
+            biz_repo = SqlBusinessContextRepository(db)
+            route = await CapabilityRegistry().resolve(Capability.ADVISOR, body.quality_level)
+            await ensure_generation_allowed(db, workspace_id=workspace_id)
+            provider = get_content_provider(quality_level=route.quality_level)
+            service = GenerateAdviceService(biz_repo, provider)
+            advice = await service.execute(
+                workspace_id=workspace_id,
+                business_id=conversation.business_id,
+                text=body.text,
+                locale=body.locale or "es",
+            )
+            assistant_msg = await add_message(
+                db,
+                conversation_id,
+                "assistant",
+                advice.summary,
+                intent="generated_advice",
+                metadata_json={"advisor": advice.model_dump()},
+            )
+            await record_usage(
+                db,
+                workspace_id=workspace_id,
+                user_id=principal.user["id"],
+                capability="advisor",
+                quality_level=route.quality_level.value,
+                provider=provider.provider_name,
+                requested_model=provider.model_name,
+                metadata=service.usage_metadata,
+                outcome="success",
+            )
+            await db.commit()
+            return await complete(
+                db,
+                record,
+                {
+                    "type": "advisor",
+                    "user_message": {"id": user_msg.id, "role": "user", "content": body.text},
+                    "assistant_message": {
+                        "id": assistant_msg.id,
+                        "role": "assistant",
+                        "content": advice.summary,
+                    },
+                    "advisor": advice.model_dump(),
                 },
             )
 

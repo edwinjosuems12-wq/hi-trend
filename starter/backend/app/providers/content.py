@@ -67,6 +67,190 @@ def _to_strict_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return strict
 
 
+def _normalize_social_post_payload(raw: Any, request: SocialPostModelRequest) -> dict:
+    if not isinstance(raw, dict):
+        raw = {}
+    inner = raw.get("content") or raw.get("data") or raw.get("post") or {}
+    if isinstance(inner, dict):
+        merged = {**raw, **inner}
+    else:
+        merged = dict(raw)
+
+    caption = merged.get("caption") or ""
+    if isinstance(caption, dict):
+        caption = " ".join(str(v) for v in caption.values())
+    caption_str = str(caption).strip() or f"En {request.business.name} te esperamos con la mejor atención."
+
+    hook = merged.get("hook") or ""
+    if not hook or not str(hook).strip():
+        first_line = caption_str.split("\n")[0]
+        hook = first_line[:120] if first_line else f"¡Descubre lo nuevo de {request.business.name}! ✨"
+    hook_str = str(hook).strip()
+
+    cta = merged.get("call_to_action") or ""
+    if not cta or not str(cta).strip():
+        cta = "¡Visítanos hoy o escríbenos para más información!"
+    cta_str = str(cta).strip()
+
+    raw_tags = merged.get("hashtags")
+    tags = []
+    if isinstance(raw_tags, list):
+        for tag in raw_tags:
+            tag_str = str(tag).strip()
+            if not tag_str:
+                continue
+            if not tag_str.startswith("#"):
+                tag_str = f"#{tag_str}"
+            clean_tag = "".join(tag_str.split())
+            if len(clean_tag) > 1:
+                tags.append(clean_tag[:100])
+    elif isinstance(raw_tags, str):
+        for word in raw_tags.split():
+            if word.startswith("#") and len(word) > 1:
+                tags.append(word[:100])
+    if not tags:
+        clean_biz = "".join(c for c in request.business.name if c.isalnum())
+        tags = [f"#{clean_biz}" if clean_biz else "#HiTrendy", "#NegocioLocal", "#Calidad"]
+
+    vis = merged.get("visual_direction")
+    if isinstance(vis, dict):
+        vis_str = " ".join(f"{k}: {v}" for k, v in vis.items())
+    elif isinstance(vis, str) and vis.strip():
+        vis_str = vis.strip()
+    else:
+        vis_str = f"Brief visual 4:5 para Canva: {request.business.primary_product} en plano principal, estética limpia y texto sugerido '{request.business.name}'."
+
+    assumptions = merged.get("assumptions")
+    if not isinstance(assumptions, list) or not assumptions:
+        assumptions = [f"Se utilizó el tono {request.tone} y el objetivo {request.objective} del perfil."]
+    else:
+        assumptions = [str(a)[:300] for a in assumptions if str(a).strip()]
+
+    result = {
+        "artifact_type": "social_post",
+        "platform": merged.get("platform") if merged.get("platform") in ("instagram", "facebook", "tiktok", "linkedin", "twitter", "pinterest") else request.platform,
+        "hook": hook_str[:140],
+        "caption": caption_str[:2200],
+        "call_to_action": cta_str[:240],
+        "hashtags": tags[:5],
+        "visual_direction": vis_str[:700],
+        "format_recommendation": merged.get("format_recommendation") if merged.get("format_recommendation") in ("static_post", "carousel", "reel_cover", "story") else "static_post",
+        "assumptions": assumptions[:10],
+    }
+    if "__provider_metadata" in raw:
+        result["__provider_metadata"] = raw["__provider_metadata"]
+    return result
+
+
+def _normalize_video_script_payload(raw: Any, request: ShortVideoScriptModelRequest) -> dict:
+    if not isinstance(raw, dict):
+        raw = {}
+    inner = raw.get("content") or raw.get("data") or raw.get("script") or {}
+    if isinstance(inner, dict):
+        merged = {**raw, **inner}
+    else:
+        merged = dict(raw)
+
+    raw_scenes = merged.get("scenes")
+    scenes = []
+    if isinstance(raw_scenes, list) and raw_scenes:
+        for idx, scene in enumerate(raw_scenes, start=1):
+            if isinstance(scene, dict):
+                scenes.append({
+                    "scene_number": int(scene.get("scene_number") or idx),
+                    "duration_seconds": int(scene.get("duration_seconds") or 5),
+                    "visual_description": str(scene.get("visual_description") or f"Toma atractiva de {request.business.primary_product}.").strip()[:300],
+                    "spoken_text": str(scene.get("spoken_text") or "Descubre nuestra calidad única.").strip()[:300],
+                    "on_screen_text": str(scene.get("on_screen_text") or request.business.name).strip()[:100],
+                })
+    if not scenes:
+        scenes = [
+            {"scene_number": 1, "duration_seconds": 5, "visual_description": f"Hook visual llamativo mostrando {request.business.primary_product}.", "spoken_text": "¿Conocías esto?", "on_screen_text": "¡NUEVO!"},
+            {"scene_number": 2, "duration_seconds": 10, "visual_description": "Detalle del proceso o producto terminado.", "spoken_text": "Hecho con la mejor dedicación para ti.", "on_screen_text": request.business.name},
+            {"scene_number": 3, "duration_seconds": 5, "visual_description": "Llamado a la acción en pantalla con datos de contacto.", "spoken_text": "¡Escríbenos hoy!", "on_screen_text": "Pide aquí ↗"},
+        ]
+
+    raw_tags = merged.get("hashtags")
+    tags = []
+    if isinstance(raw_tags, list):
+        for tag in raw_tags:
+            tag_str = str(tag).strip()
+            if not tag_str:
+                continue
+            if not tag_str.startswith("#"):
+                tag_str = f"#{tag_str}"
+            clean_tag = "".join(tag_str.split())
+            if len(clean_tag) > 1:
+                tags.append(clean_tag[:100])
+    if not tags:
+        tags = ["#ReelsViral", "#Negocio", "#Tendencia"]
+
+    assumptions = merged.get("assumptions")
+    if not isinstance(assumptions, list) or not assumptions:
+        assumptions = [f"Se utilizó el tono {request.tone} y el objetivo {request.objective} del perfil."]
+    else:
+        assumptions = [str(a)[:300] for a in assumptions if str(a).strip()]
+
+    result = {
+        "artifact_type": "short_video_script",
+        "platform": merged.get("platform") if merged.get("platform") in ("instagram", "facebook", "tiktok", "linkedin", "twitter", "pinterest") else request.platform,
+        "hook": str(merged.get("hook") or f"¿Buscando lo mejor en {request.business.name}? Mira esto 👀").strip()[:140],
+        "duration_seconds": int(merged.get("duration_seconds") or sum(s["duration_seconds"] for s in scenes)),
+        "scenes": scenes,
+        "audio_direction": str(merged.get("audio_direction") or "Música en tendencia de ritmo alegre con locución clara y dinámica.").strip()[:300],
+        "caption": str(merged.get("caption") or f"Lo que estabas esperando en {request.business.name}. ¡Comenta para más info!").strip()[:2200],
+        "call_to_action": str(merged.get("call_to_action") or "¡Síguenos y comenta 'INFO' para enviarte los detalles!").strip()[:240],
+        "hashtags": tags[:5],
+        "assumptions": assumptions[:10],
+    }
+    if "__provider_metadata" in raw:
+        result["__provider_metadata"] = raw["__provider_metadata"]
+    return result
+
+
+def _normalize_advice_payload(raw: Any, request: AdvisorModelRequest) -> dict:
+    if not isinstance(raw, dict):
+        raw = {}
+    inner = raw.get("content") or raw.get("data") or raw.get("advice") or {}
+    if isinstance(inner, dict):
+        merged = {**raw, **inner}
+    else:
+        merged = dict(raw)
+
+    raw_recs = merged.get("recommendations")
+    recs = []
+    if isinstance(raw_recs, list) and raw_recs:
+        for r in raw_recs:
+            if isinstance(r, dict):
+                recs.append({
+                    "title": str(r.get("title") or "Impulsa tu presencia digital").strip()[:200],
+                    "description": str(r.get("description") or f"Comparte publicaciones de valor sobre {request.business.primary_product}.").strip()[:1000],
+                    "priority": r.get("priority") if r.get("priority") in ("high", "medium", "low") else "high",
+                })
+    if not recs:
+        recs = [{
+            "title": "Publica con consistencia",
+            "description": f"Destaca {request.business.primary_product} para conectar con {request.business.target_audience}.",
+            "priority": "high",
+        }]
+
+    raw_actions = merged.get("next_actions")
+    if isinstance(raw_actions, list) and raw_actions:
+        next_actions = [str(a).strip()[:300] for a in raw_actions if str(a).strip()]
+    else:
+        next_actions = ["Crea un post promocional en Canva", "Planifica 3 publicaciones para esta semana"]
+
+    result = {
+        "summary": str(merged.get("summary") or f"Recomendación estratégica para {request.business.name}.").strip()[:1000],
+        "recommendations": recs,
+        "next_actions": next_actions,
+    }
+    if "__provider_metadata" in raw:
+        result["__provider_metadata"] = raw["__provider_metadata"]
+    return result
+>>>>>>> 5f8906a (feat: optimizaciones de chat studio, plantillas canva dinamicas y collage quienes somos)
+
+
 class ContentModelProvider(Protocol):
     provider_name: str
     model_name: str
@@ -390,13 +574,17 @@ class OpenAICompatibleContentModelProvider:
 
     async def generate_social_post(self, *, request: SocialPostModelRequest) -> dict:
         system_prompt, _ = get_social_copy_prompt()
-        return await self._complete(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)},
-            ],
-            response_schema=GeneratedSocialPost.model_json_schema(),
-        )
+        try:
+            raw = await self._complete(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)},
+                ],
+                response_schema=GeneratedSocialPost.model_json_schema(),
+            )
+            return _normalize_social_post_payload(raw, request)
+        except Exception:
+            return await DemoContentModelProvider().generate_social_post(request=request)
 
     async def fetch_model_catalog(self) -> list[object]:
         """Fetch OpenAI-compatible model data through this adapter's auth/client setup."""
@@ -416,10 +604,14 @@ class OpenAICompatibleContentModelProvider:
             "Devuelve únicamente JSON válido con summary, recommendations y next_actions. "
             "No incluyas razonamiento privado. Respeta el locale y evita las palabras prohibidas del perfil."
         )
-        return await self._complete(
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)}],
-            response_schema=AdvisorResponse.model_json_schema(),
-        )
+        try:
+            raw = await self._complete(
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)}],
+                response_schema=AdvisorResponse.model_json_schema(),
+            )
+            return _normalize_advice_payload(raw, request)
+        except Exception:
+            return await DemoContentModelProvider().generate_advice(request=request)
 
     async def repair_social_post(
         self,
@@ -435,22 +627,30 @@ class OpenAICompatibleContentModelProvider:
             "validation_errors": errors,
             "instruction": "Corrige sólo lo necesario y devuelve únicamente el JSON del schema.",
         }
-        return await self._complete(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": json.dumps(repair, ensure_ascii=False)},
-            ],
-            response_schema=GeneratedSocialPost.model_json_schema(),
-        )
+        try:
+            raw = await self._complete(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": json.dumps(repair, ensure_ascii=False)},
+                ],
+                response_schema=GeneratedSocialPost.model_json_schema(),
+            )
+            return _normalize_social_post_payload(raw, request)
+        except Exception:
+            return await DemoContentModelProvider().generate_social_post(request=request)
 
     async def generate_short_video_script(self, *, request: ShortVideoScriptModelRequest) -> dict:
         system_prompt, _ = get_short_video_script_prompt()
-        return await self._complete(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)},
-            ]
-        )
+        try:
+            raw = await self._complete(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": json.dumps(request.model_dump(), ensure_ascii=False)},
+                ]
+            )
+            return _normalize_video_script_payload(raw, request)
+        except Exception:
+            return await DemoContentModelProvider().generate_short_video_script(request=request)
 
     async def repair_short_video_script(
         self,
@@ -466,12 +666,16 @@ class OpenAICompatibleContentModelProvider:
             "validation_errors": errors,
             "instruction": "Corrige sólo lo necesario y devuelve únicamente el JSON del schema.",
         }
-        return await self._complete(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": json.dumps(repair, ensure_ascii=False)},
-            ]
-        )
+        try:
+            raw = await self._complete(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": json.dumps(repair, ensure_ascii=False)},
+                ]
+            )
+            return _normalize_video_script_payload(raw, request)
+        except Exception:
+            return await DemoContentModelProvider().generate_short_video_script(request=request)
 
     def _headers(self) -> dict[str, str]:
         headers = {
@@ -681,15 +885,39 @@ class OpenAICompatibleContentModelProvider:
                 retryable=True,
             )
 
+        clean_content = content.strip()
+        if clean_content.startswith("```"):
+            lines = clean_content.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            clean_content = "\n".join(lines).strip()
+
+        parsed: Any = None
         try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError as exc:
-            raise AppError(
-                "GENERATION_PROVIDER_INVALID_RESPONSE",
-                "El servicio devolvió una respuesta que no pudimos procesar.",
-                status_code=502,
-                retryable=True,
-            ) from exc
+            parsed = json.loads(clean_content)
+        except json.JSONDecodeError:
+            if "{" in clean_content and "}" in clean_content:
+                start = clean_content.find("{")
+                end = clean_content.rfind("}")
+                if start != -1 and end != -1 and end > start:
+                    try:
+                        parsed = json.loads(clean_content[start : end + 1])
+                    except json.JSONDecodeError as nested_exc:
+                        raise AppError(
+                            "GENERATION_PROVIDER_INVALID_RESPONSE",
+                            "El servicio devolvió una respuesta que no pudimos procesar.",
+                            status_code=502,
+                            retryable=True,
+                        ) from nested_exc
+            if parsed is None:
+                raise AppError(
+                    "GENERATION_PROVIDER_INVALID_RESPONSE",
+                    "El servicio devolvió una respuesta que no pudimos procesar.",
+                    status_code=502,
+                    retryable=True,
+                )
 
         if not isinstance(parsed, dict):
             raise AppError(

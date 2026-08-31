@@ -106,7 +106,7 @@ class GenerateSocialPostService:
         except ValidationError as exc:
             raise AppError(
                 "GENERATION_CONTRACT_INVALID",
-                "No pudimos preparar una propuesta editable. Inténtalo nuevamente.",
+                "No pudimos preparar una propuesta válida. Inténtalo nuevamente.",
                 status_code=502,
                 retryable=True,
             ) from exc
@@ -126,16 +126,16 @@ class GenerateSocialPostService:
                 artifact = GeneratedSocialPost.model_validate(raw)
             except ValidationError as repair_error:
                 raise AppError(
-                    "GENERATION_QUALITY_REJECTED",
-                    "No pudimos preparar una propuesta que cumpla las reglas de tu marca.",
+                    "GENERATION_CONTRACT_INVALID",
+                    "No pudimos preparar una propuesta válida. Inténtalo nuevamente.",
                     status_code=502,
                     retryable=True,
                 ) from repair_error
             final_evaluation = self._evaluator.evaluate(artifact, request)
             if not final_evaluation.accepted:
                 raise AppError(
-                    "GENERATION_QUALITY_REJECTED",
-                    "No pudimos preparar una propuesta que cumpla las reglas de tu marca.",
+                    "GENERATION_CONTRACT_INVALID",
+                    "No pudimos preparar una propuesta válida. Inténtalo nuevamente.",
                     status_code=502,
                     retryable=True,
                 )

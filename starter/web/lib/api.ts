@@ -429,14 +429,45 @@ async function requestForm<T>(path: string, body: FormData): Promise<T> {
     return demoRequest<T>(path, { method: "POST", body });
   }
 
-  const res = await fetch(path, {
+  let token = await ensureCsrfToken();
+  const headers: Record<string, string> = {
+    "ngrok-skip-browser-warning": "true",
+  };
+  if (token) {
+    headers["X-CSRF-Token"] = token;
+  }
+
+  let res = await fetch(path, {
     method: "POST",
+    headers,
     body,
     credentials: "include",
   });
 
   if (!res.ok) {
-    const payload = await res.json().catch(() => ({}));
+    let payload = await res.json().catch(() => ({}));
+    const code = payload.error?.code || "UNKNOWN";
+
+    if (code.startsWith("CSRF_TOKEN_")) {
+      resetCsrfToken();
+      token = await ensureCsrfToken();
+      const retryHeaders: Record<string, string> = {
+        "ngrok-skip-browser-warning": "true",
+      };
+      if (token) {
+        retryHeaders["X-CSRF-Token"] = token;
+      }
+      res = await fetch(path, {
+        method: "POST",
+        headers: retryHeaders,
+        body,
+        credentials: "include",
+      });
+      if (res.ok) {
+        return res.json();
+      }
+      payload = await res.json().catch(() => ({}));
+    }
 
     throw new ApiError(
       res.status,

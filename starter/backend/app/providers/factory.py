@@ -13,6 +13,7 @@ from app.providers.images import (
     ImageGenerationProvider,
     OpenAIImageGenerationProvider,
     OpenRouterImageGenerationProvider,
+    ReplicateImageGenerationProvider,
 )
 from app.providers.openrouter_catalog import OpenRouterModelCatalog
 from app.providers.video import (
@@ -75,7 +76,7 @@ def get_content_provider(
         if settings.openrouter_fast_model != "openrouter/free":
             raise AppError(
                 "CAPABILITY_UNAVAILABLE",
-                "La ruta rápida de OpenRouter no está configurada como gratuita.",
+                "El modelo rápido de OpenRouter debe ser openrouter/free.",
                 status_code=503,
                 retryable=False,
             )
@@ -205,6 +206,24 @@ def get_image_generation_provider(
         return OpenAIImageGenerationProvider(
             base_url=settings.openai_base_url,
             api_key=settings.openai_api_key,
+            model_name=model_name,
+            timeout_seconds=settings.image_generation_timeout_seconds,
+        )
+    if selected == "replicate":
+        model_name = model if model is not None else settings.image_generation_model
+        if (
+            not settings.replicate_api_key
+            or not model_name
+            or model_name not in settings.image_generation_allowed_models
+        ):
+            raise AppError(
+                "IMAGE_PROVIDER_UNAVAILABLE",
+                "La generación de imágenes no está configurada.",
+                status_code=503,
+                retryable=False,
+            )
+        return ReplicateImageGenerationProvider(
+            api_token=settings.replicate_api_key,
             model_name=model_name,
             timeout_seconds=settings.image_generation_timeout_seconds,
         )

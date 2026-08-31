@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { AdvisorResponseCard, type AdvisorData } from "@/components/advisor-response-card";
 import { GeneratedArtifactCard } from "@/components/generated-artifact-card";
 import { GeneratedVideoScriptCard } from "@/components/generated-video-script-card";
 import { VisualReviewCard, type VisualAnalysis } from "@/components/visual-review-card";
@@ -12,6 +13,7 @@ interface Message {
   content: string;
   artifact?: GeneratedArtifact;
   analysis?: VisualAnalysis;
+  advisor?: AdvisorData;
   artifactId?: string;
 }
 
@@ -79,6 +81,8 @@ export function MessageList({
           >
             {msg.analysis ? (
               <VisualReviewCard analysis={msg.analysis} />
+            ) : msg.advisor ? (
+              <AdvisorResponseCard advisor={msg.advisor} />
             ) : msg.artifact?.artifact_type === "social_post" ? (
               <GeneratedArtifactCard
                 artifact={msg.artifact}

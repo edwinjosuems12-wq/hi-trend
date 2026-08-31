@@ -157,7 +157,7 @@
   /* 4a. Landing surface                                                      */
   /* ======================================================================== */
   --landing-background: var(--ht-navy);
-  --landing-hero-background: #e8dbf7;
+  --landing-hero-background: var(--ht-navy);
   --landing-hero-deep: var(--ht-navy);
   --landing-hero-glow: radial-gradient(
     120% 90% at 50% -10%,
@@ -165,11 +165,11 @@
     transparent 60%
   );
   --landing-about-background: var(--ht-navy);
-  --landing-brand-foreground: var(--ht-navy);
+  --landing-brand-foreground: var(--ht-white);
   --landing-accent: var(--ht-purple-bright);
   --landing-accent-soft: var(--ht-purple-light);
-  --landing-cta-background: rgb(20 16 67 / 0.78);
-  --landing-cta-border: rgb(167 139 250 / 0.34);
+  --landing-cta-background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  --landing-cta-border: rgba(192, 132, 252, 0.4);
 
   /* ======================================================================== */
   /* 4b. Public auth surface (login, register, password reset)                */

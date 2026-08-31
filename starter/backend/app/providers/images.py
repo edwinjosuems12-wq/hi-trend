@@ -481,19 +481,131 @@ async def _extract_image(message: Any, *, transport: httpx.BaseTransport | None 
                 return await _download_image_url(url, transport=transport)
     raise _invalid_response()
 
+class ReplicateImageGenerationProvider:
+    """Direct adapter for Replicate's Image Generation API."""
+
+    provider_name = "replicate"
+
+    def __init__(
+        self,
+        *,
+        api_token: str,
+        model_name: str = "black-forest-labs/flux-schnell",
+        timeout_seconds: float = 120.0,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self._api_token = api_token
+        self.model_name = model_name
+        self._timeout_seconds = timeout_seconds
+        self._transport = transport
+        self._base_url = "https://api.replicate.com/v1"
+
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self._api_token}",
+            "Content-Type": "application/json",
+        }
+
+    async def generate(self, *, request: ImageGenerationRequest) -> GeneratedImage:
+        headers = self._headers()
+        aspect_ratio = (
+            request.aspect_ratio
+            if request.aspect_ratio in {"1:1", "16:9", "9:16", "4:5", "3:4", "4:3", "2:3", "3:2"}
+            else "1:1"
+        )
+        payload = {
+            "input": {
+                "prompt": request.prompt,
+                "aspect_ratio": aspect_ratio,
+                "output_format": "png",
+            }
+        }
+        if request.negative_prompt:
+            payload["input"]["negative_prompt"] = request.negative_prompt
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=self._timeout_seconds, transport=self._transport
+            ) as client:
+                response = await client.post(
+                    f"{self._base_url}/models/{self.model_name}/predictions",
+                    headers=headers,
+                    json=payload,
+                )
+                if response.status_code >= 400:
+                    raise _map_status_error(response)
+
+                prediction = response.json()
+                prediction_id = prediction.get("id")
+                if not prediction_id:
+                    raise _invalid_response()
+
+                poll_url = f"{self._base_url}/predictions/{prediction_id}"
+                final_output = None
+                max_polls = max(10, int(self._timeout_seconds / 1.5))
+                for _ in range(max_polls):
+                    await asyncio.sleep(1.5)
+                    poll_resp = await client.get(poll_url, headers=headers)
+                    if poll_resp.status_code >= 400:
+                        continue
+                    poll_data = poll_resp.json()
+                    status = poll_data.get("status")
+                    if status == "succeeded":
+                        final_output = poll_data.get("output")
+                        break
+                    if status in ("failed", "canceled"):
+                        raise AppError(
+                            "IMAGE_PROVIDER_REJECTED",
+                            "La generación de imagen falló en el proveedor.",
+                            status_code=502,
+                        )
+
+                if not final_output:
+                    raise AppError(
+                        "IMAGE_PROVIDER_TIMEOUT",
+                        "La generación de imágenes tardó demasiado. Inténtalo nuevamente.",
+                        status_code=504,
+                        retryable=True,
+                    )
+
+                image_url = None
+                if isinstance(final_output, list) and len(final_output) > 0:
+                    image_url = final_output[0]
+                elif isinstance(final_output, str):
+                    image_url = final_output
+
+                if not image_url or not isinstance(image_url, str):
+                    raise _invalid_response()
+
+                content, mime_type = await _download_image_url(image_url)
+
+                return GeneratedImage(
+                    content=content,
+                    mime_type=mime_type,
+                    provider_name=self.provider_name,
+                    model=self.model_name,
+                    usage_metadata={"provider": self.provider_name, "model": self.model_name},
+                )
+        except httpx.TimeoutException as exc:
+            raise AppError(
+                "IMAGE_PROVIDER_TIMEOUT",
+                "La generación de imágenes tardó demasiado. Inténtalo nuevamente.",
+                status_code=504,
+                retryable=True,
+            ) from exc
+        except httpx.RequestError as exc:
+            raise AppError(
+                "IMAGE_PROVIDER_UNAVAILABLE",
+                "La generación de imágenes no está disponible en este momento.",
+                status_code=503,
+                retryable=True,
+            ) from exc
+
 
 async def _download_image_url(
     url: str, *, transport: httpx.BaseTransport | None = None
 ) -> tuple[bytes, str]:
-    """Fetch a remote image a model pointed us at, never trusting the target.
-
-    ``_decode_data_url`` exists because a remote fetch is normally out of
-    bounds here: this is the one exception, needed because some OpenRouter
-    models answer with a link instead of inline bytes. The host is resolved
-    and checked before any connection is made, redirects are refused (a
-    redirect would bypass that check), and the reply must announce one of the
-    same three image types the inline path accepts.
-    """
+    """Fetch a remote image a model pointed us at, never trusting the target."""
 
     parsed = httpx.URL(url)
     if parsed.scheme != "https" or not parsed.host:
@@ -503,6 +615,27 @@ async def _download_image_url(
             info[4][0] for info in await asyncio.to_thread(socket.getaddrinfo, parsed.host, None)
         }
     except OSError as exc:
+        raise _invalid_response() from exc
+    if not addresses or not all(_is_public_ip(address) for address in addresses):
+        raise _invalid_response()
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=30.0, follow_redirects=False, transport=transport
+        ) as client:
+            response = await client.get(url)
+    except httpx.RequestError as exc:
+        raise _invalid_response() from exc
+    if response.status_code != 200:
+        raise _invalid_response()
+
+    mime_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if mime_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise _invalid_response()
+    content = response.content
+    if not content or len(content) > settings.image_generation_max_bytes:
+        raise _invalid_response()
+    return content, mime_type
         raise _invalid_response() from exc
     if not addresses or not all(_is_public_ip(address) for address in addresses):
         raise _invalid_response()

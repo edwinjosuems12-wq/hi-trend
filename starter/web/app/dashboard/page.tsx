@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/shell/app-shell";
+import { ProjectFolderCard, NewProjectFolderCard } from "@/components/projects/project-folder-card";
 import { TemplateLibrary } from "@/components/templates/template-library";
 import { api, ApiError } from "@/lib/api";
 import { routes } from "@/lib/routes";
@@ -232,55 +233,21 @@ export default function DashboardPage() {
                 ) : null}
               </section>
             ) : null}
-            <section className="folder-grid" aria-label={copy.dashboard.projectsList}>
-              {filteredProjects.map((project) => (
-                <article className="folder-card" key={project.id}>
-                  <div className="folder-art" aria-hidden="true">
-                    <Image
-                      src="/icons/folder-violet-papirus-hitrendy.svg"
-                      alt=""
-                      width={128}
-                      height={128}
-                    />
-                    <span>{project.artifact_snapshot?.hook ? 1 : 0}</span>
-                  </div>
-                  <div className="folder-card-copy">
-                    <Link href={`/projects/${project.id}`}>
-                      <h2>{project.name}</h2>
-                    </Link>
-                    <p>
-                      {project.platform} · {copy.dashboard.updatedAt}{" "}
-                      {dateLabel(project.updated_at, locale, copy.dashboard.noActivity)}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="button-secondary button-small"
-                    onClick={() => changeStatus(project)}
-                    disabled={busyId === project.id}
-                  >
-                    {busyId === project.id
-                      ? copy.common.saving
-                      : project.status === "active"
-                        ? copy.dashboard.archive
-                        : copy.dashboard.restore}
-                  </button>
-                </article>
-              ))}
-              <Link href={routes.studioNew} className="folder-card folder-card--new">
-                <span className="folder-new-art" aria-hidden="true">
-                  <Image
-                    src="/icons/folder-violet-papirus-hitrendy.svg"
-                    alt=""
-                    width={128}
-                    height={128}
+            <div className="projects-glass-container">
+              <section className="folder-grid" aria-label={copy.dashboard.projectsList}>
+                {filteredProjects.map((project, index) => (
+                  <ProjectFolderCard
+                    key={project.id}
+                    project={project}
+                    variant={index % 2 === 0 ? "blue" : "purple"}
+                    locale={locale}
+                    isBusy={busyId === project.id}
+                    onStatusChange={changeStatus}
                   />
-                  <span className="folder-new-plus">+</span>
-                </span>
-                <strong>{copy.dashboard.newProject}</strong>
-                <small>{copy.dashboard.newProjectHint}</small>
-              </Link>
-            </section>
+                ))}
+                <NewProjectFolderCard locale={locale} />
+              </section>
+            </div>
             <section className="dashboard-recommended">
               <div className="content-title">
                 <h2>{copy.dashboard.recommended}</h2>

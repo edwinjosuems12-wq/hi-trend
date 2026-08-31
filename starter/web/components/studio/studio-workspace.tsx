@@ -22,6 +22,7 @@ import {
 } from "@/lib/creation-draft";
 import { routes } from "@/lib/routes";
 import type { GeneratedArtifact, GeneratedSocialPost } from "@/types/artifact";
+import type { AdvisorData } from "@/components/advisor-response-card";
 import type { VisualAnalysis } from "@/components/visual-review-card";
 
 type ConversationStatus = "active" | "archived";
@@ -39,6 +40,7 @@ interface ChatMessage {
   content: string;
   artifact?: GeneratedArtifact;
   analysis?: VisualAnalysis;
+  advisor?: AdvisorData;
   artifactId?: string;
 }
 interface ConversationData {
@@ -46,7 +48,7 @@ interface ConversationData {
     id: string;
     role: string;
     content: string;
-    metadata?: { analysis?: VisualAnalysis } | null;
+    metadata?: { analysis?: VisualAnalysis; advisor?: AdvisorData } | null;
     artifact?: GeneratedArtifact;
     artifact_id?: string | null;
   }>;
@@ -58,10 +60,14 @@ interface SendResult {
   artifact?: GeneratedArtifact;
   artifact_id?: string;
   analysis?: VisualAnalysis;
+  advisor?: AdvisorData;
 }
 
 type GenerationIntent =
-  "create_social_post" | "create_short_video_script" | "analyze_visual";
+  | "create_social_post"
+  | "create_short_video_script"
+  | "analyze_visual"
+  | "ask_advisor";
 
 interface GenerationOperation {
   key: string;
@@ -73,28 +79,31 @@ interface GenerationOperation {
 
 /**
  * The quick actions seed the conversation with the request they name, so each
- * one lands in the thread as a real first message instead of three buttons
- * that all open the same blank conversation.
+ * button must produce a prompt that will pass validation as an initial turn.
  */
 const QUICK_ACTIONS: Array<{
   label: string;
   hint: string;
   prompt: string;
+  intent?: GenerationIntent;
 }> = [
   {
-    label: "Crear una publicación",
-    hint: "Texto, enfoque visual y llamada a la acción.",
+    label: "Auditar diseño y sugerir Canva",
+    hint: "Detecta errores/IA y recomienda plantillas de Canva.",
+    prompt: "Quiero auditar el diseño de una imagen o volante para mi negocio y usar una plantilla de Canva.",
+    intent: "analyze_visual",
+  },
+  {
+    label: "Crear publicación para redes",
+    hint: "Texto, gancho y llamado a la acción comercial.",
     prompt: "Quiero crear una publicación para las redes de mi negocio.",
+    intent: "create_social_post",
   },
   {
-    label: "Revisar un diseño",
-    hint: "Fortalezas, problemas y recomendaciones claras.",
-    prompt: "Quiero revisar un diseño y mejorarlo.",
-  },
-  {
-    label: "Planear contenido",
-    hint: "Ideas adaptadas a tu negocio y audiencia.",
+    label: "Planear contenido de la semana",
+    hint: "Ideas y estrategia semanal adaptadas a tu negocio.",
     prompt: "Ayúdame a planear el contenido de las próximas semanas.",
+    intent: "ask_advisor",
   },
 ];
 
@@ -197,6 +206,7 @@ export function StudioWorkspace({
             role: message.role as "user" | "assistant",
             content: message.content,
             analysis: message.metadata?.analysis,
+            advisor: message.metadata?.advisor,
             artifact: message.artifact,
             artifactId: message.artifact_id || undefined,
           }))
@@ -301,7 +311,11 @@ export function StudioWorkspace({
     attachmentIds: string[] = [],
     continuation?: GenerationOperation
   ) {
-    if (!conversationId || generationInFlightRef.current) return;
+    if (generationInFlightRef.current) return;
+    if (!conversationId) {
+      startConversationWith(text);
+      return;
+    }
     const operation = continuation || {
       key: createIdempotencyKey(),
       text,
@@ -349,7 +363,17 @@ export function StudioWorkspace({
             artifactId: result.artifact_id,
           },
         ]);
-      else if (result.type === "visual_analysis" && result.analysis) {
+      else if (result.type === "advisor" && result.advisor) {
+        setMessages((current) => [
+          ...current,
+          {
+            id: result.assistant_message?.id || `advisor_${Date.now()}`,
+            role: "assistant",
+            content: result.assistant_message?.content || result.advisor?.summary || "",
+            advisor: result.advisor,
+          },
+        ]);
+      } else if (result.type === "visual_analysis" && result.analysis) {
         const analysis = result.analysis;
         setMessages((current) => [
           ...current,
@@ -377,8 +401,8 @@ export function StudioWorkspace({
         );
       }
     } finally {
+      generationInFlightRef.current = false;
       if (operation.token === operationTokenRef.current) {
-        generationInFlightRef.current = false;
         generationControllerRef.current = null;
         setLoading(false);
         setLoadingLabel("Preparando una propuesta para tu negocio…");

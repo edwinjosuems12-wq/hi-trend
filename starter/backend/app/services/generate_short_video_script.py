@@ -62,7 +62,7 @@ class GenerateShortVideoScriptService:
         except ValidationError as exc:
             raw = await self._provider.repair_short_video_script(
                 request=request,
-                invalid_output=raw,
+                invalid_output=raw if isinstance(raw, dict) else {},
                 errors=[error["msg"] for error in exc.errors()],
             )
             repair_metadata = raw.pop("__provider_metadata", None)

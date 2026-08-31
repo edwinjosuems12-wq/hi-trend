@@ -37,6 +37,13 @@ _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 def ensure_engine():
     global _engine, _session_factory
+    import sys
+    if sys.platform == "win32":
+        import asyncio
+        try:
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        except Exception:
+            pass
     if _engine is None:
         _engine = create_async_engine(
             _build_url(),

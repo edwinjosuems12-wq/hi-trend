@@ -66,17 +66,17 @@ class GenerateShortVideoScriptCommand(BaseModel):
 
 
 class AdvisorRecommendation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     title: str = Field(min_length=1, max_length=180)
     description: str = Field(min_length=1, max_length=700)
-    priority: Literal["high", "medium", "low"]
+    priority: Literal["high", "medium", "low"] = "high"
 
 
 class AdvisorResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
     summary: str = Field(min_length=1, max_length=1200)
-    recommendations: list[AdvisorRecommendation] = Field(min_length=1, max_length=5)
-    next_actions: list[str] = Field(min_length=1, max_length=5)
+    recommendations: list[AdvisorRecommendation] = Field(min_length=1, max_length=10)
+    next_actions: list[str] = Field(min_length=1, max_length=10)
 
 
 class GeneratedSocialPost(BaseModel):

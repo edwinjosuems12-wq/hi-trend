@@ -637,6 +637,10 @@ class Settings:
             name="IMAGE_GENERATION_ENABLED",
         )
         self.image_provider: str = values.get("IMAGE_PROVIDER", "demo").strip().lower()
+        self.replicate_api_key: str = (
+            values.get("REPLICATE_API_KEY", "").strip()
+            or values.get("REPLICATE_API_TOKEN", "").strip()
+        )
         # The server owns the model identity. The frontend never sends a model
         # ID: it only picks an aspect ratio, so a compromised client cannot
         # redirect spending to an arbitrary paid model.
@@ -1281,7 +1285,7 @@ class Settings:
                 require_https=self.is_production_like,
             )
 
-        if self.image_provider not in {"demo", "openai", "openrouter"}:
+        if self.image_provider not in {"demo", "openai", "openrouter", "replicate"}:
             raise RuntimeError("IMAGE_PROVIDER no es compatible.")
         # A claim must outlive the call it protects. If the lease could expire
         # while a legitimate provider call is still in flight, the job would be
@@ -1296,6 +1300,17 @@ class Settings:
                 "IMAGE_GENERATION_TIMEOUT_SECONDS por al menos "
                 f"{_IMAGE_LEASE_MARGIN_SECONDS} segundos."
             )
+        if self.image_generation_enabled and self.image_provider == "replicate":
+            if not self.replicate_api_key:
+                raise RuntimeError("REPLICATE_API_KEY es obligatoria para IMAGE_PROVIDER=replicate.")
+            if not self.image_generation_model:
+                raise RuntimeError(
+                    "IMAGE_GENERATION_MODEL es obligatoria para IMAGE_PROVIDER=replicate."
+                )
+            if self.image_generation_model not in self.image_generation_allowed_models:
+                raise RuntimeError(
+                    "IMAGE_GENERATION_MODEL debe estar en IMAGE_GENERATION_ALLOWED_MODELS."
+                )
         if self.image_generation_enabled and self.image_provider == "openrouter":
             if not self.openrouter_api_key:
                 raise RuntimeError(

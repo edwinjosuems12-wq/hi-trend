@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 
 import { LandingPosterRail } from "@/components/landing/poster-rail";
+import { AboutCollage } from "@/components/landing/about-collage";
 import { PublicHeader } from "@/components/layout/public-header";
 import { routes } from "@/lib/routes";
 
@@ -89,13 +90,7 @@ export default function HomePage() {
         </svg>
         <div className="landing-about-inner">
           <div className="landing-about-visual">
-            <Image
-              src="/landing/about-collage.png"
-              alt="Ejemplos de contenido visual para cafeterías y pequeños negocios"
-              width={720}
-              height={555}
-              priority
-            />
+            <AboutCollage />
           </div>
           <div className="landing-about-copy">
             <h2 id="about-title">¿Quiénes somos?</h2>

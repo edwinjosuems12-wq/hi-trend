@@ -33,6 +33,15 @@ async def analyze_authorized_asset(
     image_bytes = None
     if provider.requires_image_content:
         image_bytes = await get_object_storage_provider().read(key=asset.storage_path)
+
+    biz_context = None
+    try:
+        from app.conversations.repository import SqlBusinessContextRepository
+        biz_repo = SqlBusinessContextRepository(db)
+        biz_context = await biz_repo.get_for_generation(workspace_id=workspace_id)
+    except Exception:
+        pass
+
     try:
         analysis = AssetAnalysisResult.model_validate(
             await provider.analyze(
@@ -41,6 +50,11 @@ async def analyze_authorized_asset(
                     width=asset.width,
                     height=asset.height,
                     image_bytes=image_bytes,
+                    business_name=biz_context.name if biz_context else None,
+                    business_category=biz_context.category if biz_context else None,
+                    primary_product=biz_context.primary_product if biz_context else None,
+                    target_audience=biz_context.target_audience if biz_context else None,
+                    city=biz_context.city if biz_context else None,
                 )
             )
         )
@@ -77,6 +91,9 @@ def analysis_to_dict(
         "improvements": [item.model_dump() for item in analysis.improvements],
         "revised_copy": analysis.revised_copy,
         "accessibility_notes": analysis.accessibility_notes,
+        "ai_hallmarks": getattr(analysis, "ai_hallmarks", []),
+        "canva_templates": [t.model_dump() if hasattr(t, "model_dump") else t for t in getattr(analysis, "canva_templates", [])],
+        "canva_slots_guide": getattr(analysis, "canva_slots_guide", {}),
         "review_mode": review_mode,
         "created_at": record.created_at.isoformat() if record.created_at else None,
     }
