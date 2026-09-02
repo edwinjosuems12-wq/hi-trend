@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useState, type FormEvent } from "react";
 
 export interface VisualImprovement {
   priority: "high" | "medium" | "low";
@@ -26,17 +26,15 @@ export interface VisualAnalysis {
   ai_hallmarks?: string[];
   canva_templates?: CanvaTemplateRec[];
   canva_slots_guide?: Record<string, string>;
+  /** Seed for the refine field: what the assistant searched Canva for. */
+  canva_query?: string;
+  /** Extra angles the assistant suggests trying in Canva. */
+  canva_query_suggestions?: string[];
 }
 
 interface Props {
   analysis: VisualAnalysis;
 }
-
-const PRIORITY_COLORS: Record<string, string> = {
-  high: "var(--danger, #ef4444)",
-  medium: "var(--warning, #f59e0b)",
-  low: "var(--muted-foreground, #9ca3af)",
-};
 
 const PRIORITY_LABELS: Record<string, string> = {
   high: "Alta",
@@ -54,286 +52,223 @@ const AREA_LABELS: Record<string, string> = {
   accessibility: "Accesibilidad",
 };
 
+const CANVA_SEARCH = "https://www.canva.com/templates/";
+
+/** Canva takes the query as a plain search parameter. */
+function canvaSearchUrl(query: string) {
+  return `${CANVA_SEARCH}?query=${encodeURIComponent(query.trim())}`;
+}
+
 export function VisualReviewCard({ analysis }: Props) {
   const titleId = useId();
+  const searchId = useId();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [query, setQuery] = useState(analysis.canva_query || "");
 
   const handleCopy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
+    void navigator.clipboard?.writeText(text);
     setCopiedKey(key);
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const templates = analysis.canva_templates && analysis.canva_templates.length > 0
-    ? analysis.canva_templates
-    : [
-        {
-          title: "Plantilla Producto Destacado (Canva)",
-          canva_url: "https://canva.link/jxr6r3xdtdx3p18",
-          thumbnail_url: "/templates/flores.png",
-          reason: "Estructura vertical 4:5 profesional con espacios equilibrados para foto y titular.",
-        },
-        {
-          title: "Plantilla Oferta Cercana (Canva)",
-          canva_url: "https://canva.link/d5gnf0tsot7t70m",
-          thumbnail_url: "/templates/coffee.png",
-          reason: "Diseño optimizado para promociones y ofertas con llamado a la acción visible.",
-        },
-      ];
+  const templates = analysis.canva_templates ?? [];
+  const headline = analysis.canva_slots_guide?.headline;
+  // The "what still reads as AI / off-the-shelf" list. When the provider does
+  // not send one, the improvement reasons say the same thing.
+  const weakPoints =
+    analysis.ai_hallmarks && analysis.ai_hallmarks.length > 0
+      ? analysis.ai_hallmarks
+      : analysis.improvements.map((item) => item.reason);
+  const suggestions = analysis.canva_query_suggestions ?? [];
 
-  const aiHallmarks = analysis.ai_hallmarks && analysis.ai_hallmarks.length > 0
-    ? analysis.ai_hallmarks
-    : [
-        "Composición con elementos sobrecargados típica de generación por IA.",
-        "Tipografía con poco contraste con respecto al fondo.",
-        "Recomendamos usar una plantilla de Canva creada por diseñadores para un acabado comercial.",
-      ];
+  function openCanvaSearch(event: FormEvent) {
+    event.preventDefault();
+    const term = query.trim();
+    if (!term) return;
+    window.open(canvaSearchUrl(term), "_blank", "noopener,noreferrer");
+  }
 
   return (
-    <article
-      className="artifact-card"
-      style={{
-        marginTop: 12,
-        background: "var(--surface, #1e1e24)",
-        border: "1px solid var(--border, rgba(255,255,255,0.1))",
-        borderRadius: "var(--radius-md, 12px)",
-        padding: "20px",
-      }}
-      aria-labelledby={titleId}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
-        <span
-          style={{
-            background: "rgba(16, 185, 129, 0.15)",
-            color: "#10b981",
-            padding: "4px 10px",
-            borderRadius: "999px",
-            fontSize: "0.75rem",
-            fontWeight: 700,
-            letterSpacing: "0.05em",
-            textTransform: "uppercase",
-          }}
-        >
-          🔍 Auditoría Visual & Recomendación Canva
-        </span>
+    <article className="review-card" aria-labelledby={titleId}>
+      <div className="review-card-head">
+        <span className="review-eyebrow">Auditoría visual</span>
+        <h3 id={titleId}>Diagnóstico del diseño</h3>
       </div>
+      <p className="review-summary">{analysis.summary}</p>
 
-      {/* Summary */}
-      <section style={{ marginBottom: "16px" }}>
-        <h3 id={titleId} style={{ fontSize: "1.1rem", fontWeight: 700, margin: "0 0 6px 0" }}>
-          Diagnóstico del Diseño
-        </h3>
-        <p style={{ margin: 0, fontSize: "0.92rem", lineHeight: 1.5, color: "var(--foreground, #f3f4f6)" }}>
-          {analysis.summary}
-        </p>
-      </section>
-
-      {/* AI Hallmarks Diagnosis */}
-      <section
-        style={{
-          marginBottom: "18px",
-          padding: "12px 14px",
-          borderRadius: "8px",
-          background: "rgba(239, 68, 68, 0.08)",
-          border: "1px solid rgba(239, 68, 68, 0.2)",
-        }}
-      >
-        <h4 style={{ fontSize: "0.88rem", fontWeight: 700, margin: "0 0 8px 0", color: "#f87171", display: "flex", alignItems: "center", gap: "6px" }}>
-          ⚠️ Aspectos Detectados (IA vs Diseño Profesional)
-        </h4>
-        <ul style={{ margin: 0, paddingLeft: 18, color: "#fca5a5", fontSize: "0.85rem", lineHeight: 1.4 }}>
-          {aiHallmarks.map((hallmark, i) => (
-            <li key={i} style={{ marginBottom: 4 }}>
-              {hallmark}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* Recommended Canva Templates */}
-      <section style={{ marginBottom: "20px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-          <h4 style={{ fontSize: "0.95rem", fontWeight: 700, margin: 0, color: "#ffffff" }}>
-            🎨 Plantillas de Canva Recomendadas (Hechas por Diseñadores)
-          </h4>
-          <span style={{ fontSize: "0.75rem", color: "var(--muted-foreground, #9ca3af)" }}>
-            Listas para editar
-          </span>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "12px" }}>
-          {templates.map((tpl, i) => (
-            <div
-              key={i}
-              style={{
-                padding: "14px",
-                borderRadius: "10px",
-                background: "rgba(255, 255, 255, 0.04)",
-                border: "1px solid rgba(255, 255, 255, 0.1)",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-                gap: "10px",
-              }}
-            >
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                  <span style={{ fontSize: "1.1rem" }}>📐</span>
-                  <strong style={{ fontSize: "0.9rem", color: "#ffffff" }}>{tpl.title}</strong>
-                </div>
-                {tpl.reason && (
-                  <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--muted-foreground, #d1d5db)", lineHeight: 1.4 }}>
-                    {tpl.reason}
-                  </p>
-                )}
-              </div>
-              <a
-                href={tpl.canva_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "6px",
-                  padding: "8px 12px",
-                  borderRadius: "6px",
-                  background: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
-                  color: "#ffffff",
-                  fontSize: "0.82rem",
-                  fontWeight: 700,
-                  textDecoration: "none",
-                  boxShadow: "0 2px 8px rgba(99, 102, 241, 0.3)",
-                  transition: "transform 0.15s ease",
-                }}
-              >
-                🚀 Abrir plantilla en Canva ↗
-              </a>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Canva Copy Brief */}
-      {(analysis.revised_copy || analysis.canva_slots_guide) && (
-        <section
-          style={{
-            marginBottom: "18px",
-            padding: "14px",
-            borderRadius: "8px",
-            background: "rgba(99, 102, 241, 0.05)",
-            border: "1px solid rgba(99, 102, 241, 0.15)",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <h4 style={{ fontSize: "0.9rem", fontWeight: 700, margin: 0, color: "var(--primary, #818cf8)" }}>
-              📋 Guía de Textos para pegar en Canva
-            </h4>
+      {/* The reference puts the verdict in two facing columns, so the good news
+          and the work to do are read together instead of one after the other. */}
+      {(analysis.strengths.length > 0 || weakPoints.length > 0) && (
+        <div className="review-split" data-columns="2">
+          <div className="review-split-column" data-tone="positive">
+            <h4>Haz hecho bien en:</h4>
+            <ul>
+              {analysis.strengths.length > 0 ? (
+                analysis.strengths.map((item, index) => (
+                  <li key={index}>{item}</li>
+                ))
+              ) : (
+                <li>Aún no encontramos puntos fuertes claros en esta pieza.</li>
+              )}
+            </ul>
           </div>
-          {analysis.canva_slots_guide?.headline && (
-            <div style={{ marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontSize: "0.85rem" }}>
-                <span style={{ color: "var(--muted-foreground, #9ca3af)", fontWeight: 600 }}>Titular: </span>
-                <span style={{ color: "#ffffff" }}>{analysis.canva_slots_guide.headline}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleCopy(analysis.canva_slots_guide!.headline, "headline")}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: copiedKey === "headline" ? "#10b981" : "var(--primary, #818cf8)",
-                  fontSize: "0.75rem",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                {copiedKey === "headline" ? "✓ Copiado" : "Copiar"}
-              </button>
-            </div>
-          )}
-          {analysis.revised_copy && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px" }}>
-              <div style={{ fontSize: "0.85rem", lineHeight: 1.4 }}>
-                <span style={{ color: "var(--muted-foreground, #9ca3af)", fontWeight: 600 }}>Copy sugerido: </span>
-                <span style={{ color: "#f3f4f6" }}>{analysis.revised_copy}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleCopy(analysis.revised_copy!, "copy")}
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: copiedKey === "copy" ? "#10b981" : "var(--primary, #818cf8)",
-                  fontSize: "0.75rem",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {copiedKey === "copy" ? "✓ Copiado" : "Copiar"}
-              </button>
-            </div>
-          )}
+          <span className="review-split-divider" aria-hidden="true" />
+          <div className="review-split-column" data-tone="critical">
+            <h4>Puntos a mejorar:</h4>
+            <ul>
+              {weakPoints.map((item, index) => (
+                <li key={index}>{item}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {analysis.improvements.length > 0 && (
+        <section className="review-section">
+          <h4>Cómo mejorarlo</h4>
+          <ul className="review-improvements">
+            {analysis.improvements.map((item, index) => (
+              <li key={index} className="review-improvement">
+                <div className="review-improvement-head">
+                  <strong>{AREA_LABELS[item.area] || item.area}</strong>
+                  <span className="review-priority" data-priority={item.priority}>
+                    Prioridad {PRIORITY_LABELS[item.priority] || item.priority}
+                  </span>
+                </div>
+                <p className="review-improvement-reason">{item.reason}</p>
+                <p className="review-improvement-action">{item.action}</p>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 
-      {/* Improvements list */}
-      <section style={{ marginBottom: "16px" }}>
-        <h4 style={{ fontSize: "0.9rem", fontWeight: 700, margin: "0 0 10px 0", color: "var(--muted-foreground, #9ca3af)" }}>
-          Detalles de Optimización Visual
-        </h4>
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {analysis.improvements.map((imp, i) => (
-            <div
-              key={i}
-              style={{
-                padding: "10px 12px",
-                borderRadius: "var(--radius-sm, 6px)",
-                border: "1px solid var(--border, rgba(255,255,255,0.06))",
-                background: "rgba(255, 255, 255, 0.02)",
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 4,
-                }}
-              >
-                <strong style={{ fontSize: "0.85rem", color: "#ffffff" }}>
-                  {AREA_LABELS[imp.area] || imp.area}
-                </strong>
-                <span
-                  style={{
-                    fontSize: "0.7rem",
-                    fontWeight: 700,
-                    padding: "2px 8px",
-                    borderRadius: "999px",
-                    background: `color-mix(in srgb, ${PRIORITY_COLORS[imp.priority]} 18%, transparent)`,
-                    color: PRIORITY_COLORS[imp.priority],
-                  }}
-                >
-                  {PRIORITY_LABELS[imp.priority]}
-                </span>
-              </div>
-              <p style={{ margin: "0 0 4px", fontSize: "0.85rem", color: "var(--muted-foreground, #d1d5db)" }}>
-                {imp.reason}
-              </p>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "0.8rem",
-                  color: "var(--primary, #818cf8)",
-                }}
-              >
-                {imp.action}
-              </p>
+      {analysis.accessibility_notes.length > 0 && (
+        <section className="review-section">
+          <h4>Accesibilidad</h4>
+          <div className="review-split">
+            <div className="review-split-column">
+              <ul>
+                {analysis.accessibility_notes.map((note, index) => (
+                  <li key={index}>{note}</li>
+                ))}
+              </ul>
             </div>
-          ))}
+          </div>
+        </section>
+      )}
+
+      {(headline || analysis.revised_copy) && (
+        <section className="review-section">
+          <h4>Textos listos para pegar</h4>
+          <dl className="review-copy">
+            {headline && (
+              <div className="review-copy-row">
+                <dt>Titular</dt>
+                <dd>{headline}</dd>
+                <button
+                  type="button"
+                  className="review-copy-button"
+                  onClick={() => handleCopy(headline, "headline")}
+                  data-copied={copiedKey === "headline" || undefined}
+                >
+                  {copiedKey === "headline" ? "Copiado" : "Copiar"}
+                </button>
+              </div>
+            )}
+            {analysis.revised_copy && (
+              <div className="review-copy-row">
+                <dt>Copy sugerido</dt>
+                <dd>{analysis.revised_copy}</dd>
+                <button
+                  type="button"
+                  className="review-copy-button"
+                  onClick={() => handleCopy(analysis.revised_copy!, "copy")}
+                  data-copied={copiedKey === "copy" || undefined}
+                >
+                  {copiedKey === "copy" ? "Copiado" : "Copiar"}
+                </button>
+              </div>
+            )}
+          </dl>
+        </section>
+      )}
+
+      <section className="review-section">
+        <div className="review-templates-head">
+          <h4>Plantillas de Canva para rediseñarlo</h4>
+          <p>Se abren listas para editar</p>
         </div>
+
+        {templates.length > 0 && (
+          <div className="review-template-grid">
+            {templates.map((template, index) => (
+              <a
+                key={index}
+                className="review-template"
+                href={template.canva_url}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span className="review-template-thumb">
+                  {template.thumbnail_url ? (
+                    // Provider-supplied thumbnails come from hosts the image
+                    // optimizer is not configured for.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={template.thumbnail_url} alt="" loading="lazy" />
+                  ) : (
+                    <span aria-hidden="true">◫</span>
+                  )}
+                </span>
+                <strong>{template.title}</strong>
+                {template.reason ? <p>{template.reason}</p> : null}
+                <em>Abrir en Canva ↗</em>
+              </a>
+            ))}
+          </div>
+        )}
+
+        {/* Refining the search is the usual next move after seeing the picks,
+            so it happens here instead of asking again in the composer. */}
+        <form className="review-template-search" onSubmit={openCanvaSearch}>
+          <label className="visually-hidden" htmlFor={searchId}>
+            Buscar otras plantillas en Canva
+          </label>
+          <input
+            id={searchId}
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar otro estilo en Canva…"
+          />
+          <button type="submit" disabled={!query.trim()}>
+            Buscar en Canva
+          </button>
+        </form>
+
+        {suggestions.length > 0 && (
+          <div className="review-template-chips">
+            {suggestions.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className="review-template-chip"
+                onClick={() => {
+                  setQuery(item);
+                  window.open(
+                    canvaSearchUrl(item),
+                    "_blank",
+                    "noopener,noreferrer"
+                  );
+                }}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        )}
       </section>
     </article>
   );
 }
-

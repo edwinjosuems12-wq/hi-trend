@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
+import { RouteSplash } from "@/components/auth/route-splash";
 import { api, ApiError } from "@/lib/api";
 import { loginPath, routes } from "@/lib/routes";
 
@@ -49,15 +50,15 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
   }, [pathname, router]);
 
   if (state === "checking") {
-    return <main className="route-status">Comprobando tu sesión…</main>;
+    return <RouteSplash />;
   }
 
   if (state === "error") {
     return (
-      <main className="route-status" role="alert">
+      <RouteSplash tone="error">
         No pudimos comprobar tu sesión. Actualiza la página para intentarlo de
         nuevo.
-      </main>
+      </RouteSplash>
     );
   }
 

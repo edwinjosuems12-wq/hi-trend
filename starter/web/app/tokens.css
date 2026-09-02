@@ -42,6 +42,19 @@
   --ht-purple-deep: #6d28d9;
   --ht-purple-bright: #a855f7;
 
+  /* ---- Figma gradient spine --------------------------------------------- */
+  /* references/figma/02-chat-concepts.png paints every authenticated surface
+     with one vertical ramp: near-black indigo at the top falling into a vivid
+     violet at the bottom. These four stops are that ramp, and nothing else in
+     the file may introduce a fifth. The peak is the brightest the product is
+     allowed to get: white sits at 6.8:1 on it and --ht-purple-mist at 4.7:1,
+     so both the composer placeholder and the muted copy still clear AA where
+     the ramp is lightest. */
+  --ht-indigo-abyss: #170a38;
+  --ht-indigo-deep: #24105e;
+  --ht-violet-mid: #4b18a8;
+  --ht-violet-peak: #7c26d4;
+
   /* ======================================================================== */
   /* 2. Derived ramp                                                          */
   /* Every value below is a blend of two layer-1 colours. The comment gives   */
@@ -152,6 +165,29 @@
     var(--ht-purple-deep) 0%,
     var(--ht-purple-bright) 100%
   );
+
+  /* The Figma ramp itself. Used verbatim by the app shell and the studio
+     canvas so the two read as one continuous surface. */
+  --gradient-brand: linear-gradient(
+    180deg,
+    var(--ht-indigo-abyss) 0%,
+    var(--ht-indigo-deep) 30%,
+    var(--ht-violet-mid) 68%,
+    var(--ht-violet-peak) 100%
+  );
+  /* Two off-centre blooms that keep the ramp from reading as a flat print.
+     Both are white-violet at low alpha, so neither moves a contrast ratio. */
+  --gradient-brand-bloom:
+    radial-gradient(
+      70% 48% at 82% 4%,
+      rgb(168 85 247 / 0.28) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      60% 45% at 6% 96%,
+      rgb(244 114 224 / 0.16) 0%,
+      transparent 68%
+    );
 
   /* ======================================================================== */
   /* 4a. Landing surface                                                      */
@@ -268,21 +304,17 @@
   /* The one dark surface in the product. Foregrounds here are light, so      */
   /* they get their own roles rather than borrowing the app shell's.          */
   /* ======================================================================== */
-  /* The gradient stops at --ht-canvas-high rather than --ht-purple: the
-     bottom of the canvas is where the composer and the quick actions live, so
-     it is the one region that must stay dark enough to carry text. */
-  --chat-canvas: linear-gradient(
-    172deg,
-    var(--ht-navy-deep) 0%,
-    var(--ht-canvas-mid) 42%,
-    var(--ht-canvas-high) 100%
-  );
+  /* The same ramp the shell paints, so the studio panel reads as a window onto
+     the app background rather than a differently-purple card sitting on it.
+     --ht-violet-peak is the floor: the composer and the quick actions live
+     down there and both carry text. */
+  --chat-canvas: var(--gradient-brand);
   /* Centred below the box so only the upper falloff is visible — a bloom in
      the lower-right corner, not a second light source. */
   --chat-canvas-glow: radial-gradient(
-    90% 70% at 78% 108%,
-    rgb(167 139 250 / 0.22) 0%,
-    transparent 62%
+    70% 50% at 84% 2%,
+    rgb(168 85 247 / 0.26) 0%,
+    transparent 64%
   );
   --chat-foreground: var(--ht-white);
   --chat-foreground-muted: var(--ht-purple-mist);
@@ -303,12 +335,13 @@
   --chat-chip-background: rgb(18 16 58 / 0.32);
   --chat-chip-hover: rgb(18 16 58 / 0.45);
 
-  /* Icon rail — the flat dark column left of the panel and the canvas. Idle
-     glyphs are 8.8:1 on the rail, so they clear the 3:1 non-text minimum with
-     room to spare and still read as secondary next to the white active state. */
-  --chat-rail-background: var(--ht-ink);
+  /* Icon rail. The reference has no rail column at all: each icon is its own
+     rounded tile floating on the canvas, so the rail itself is transparent and
+     these tokens dress the individual buttons. */
+  --chat-rail-background: transparent;
+  --chat-rail-tile: rgb(13 6 38 / 0.42);
   --chat-rail-foreground: var(--ht-purple-soft);
-  --chat-rail-hover-background: rgb(255 255 255 / 0.12);
+  --chat-rail-hover-background: rgb(13 6 38 / 0.66);
   --chat-rail-hover-foreground: var(--ht-white);
   --chat-rail-active-background: var(--ht-white);
   --chat-rail-active-foreground: var(--ht-purple-deep);
@@ -321,9 +354,35 @@
   --chat-bubble-assistant-foreground: var(--ht-ink);
   --chat-bubble-border: rgb(18 16 58 / 0.08);
 
+  /* Rich answers — the review, template and artifact cards an assistant turn
+     can carry. The reference draws these as light panels, the same family as
+     the bubbles, so they get the paper roles rather than the shell's glass. */
+  --chat-card: var(--ht-white);
+  --chat-card-foreground: var(--ht-ink);
+  --chat-card-muted: var(--ht-muted-strong);
+  --chat-card-border: var(--ht-card-line);
+  --chat-card-well: var(--ht-paper);
+  --chat-card-divider: var(--ht-divider);
+  --chat-card-accent: var(--ht-purple-deep);
+  --chat-card-accent-soft: rgb(124 58 237 / 0.1);
+  /* Verdict colours inside those cards. The card is white, so these take the
+     light-mode ramp (--ht-success 5.4:1, --ht-warning 5.1:1, --ht-danger 5.3:1
+     on white) rather than the on-dark variants the rest of the chat uses. */
+  --chat-card-positive: var(--ht-success);
+  --chat-card-positive-soft: rgb(15 122 82 / 0.1);
+  --chat-card-warning: var(--ht-warning);
+  --chat-card-warning-soft: rgb(138 83 0 / 0.12);
+  --chat-card-critical: var(--ht-danger);
+  --chat-card-critical-soft: rgb(200 30 91 / 0.1);
+
   /* Composer. */
-  --chat-composer-background: rgb(255 255 255 / 0.12);
+  --chat-composer-background: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.17) 0%,
+    rgb(255 255 255 / 0.09) 100%
+  );
   --chat-composer-border: rgb(255 255 255 / 0.26);
+  --chat-attachment-background: rgb(13 6 38 / 0.5);
   --chat-composer-foreground: var(--ht-white);
   /* 0.78 rather than a softer value: the placeholder is real instructional
      copy, so it owes the same 4.5:1 as body text (4.9:1 here). */
@@ -334,18 +393,23 @@
   --chat-record-background: var(--ht-pink);
   --chat-record-foreground: var(--ht-ink);
 
-  /* Conversation panel — light panel docked beside the dark canvas. */
-  --chat-panel-background: var(--ht-white);
-  --chat-panel-foreground: var(--ht-ink);
-  --chat-panel-muted: var(--ht-muted-strong);
-  --chat-panel-border: var(--ht-card-line);
-  --chat-panel-row-hover: var(--ht-paper);
-  --chat-panel-row-active: var(--ht-icon-surface);
-  --chat-scrim: rgb(18 16 58 / 0.52);
+  /* Conversation panel — the history dropdown that opens over the canvas. It
+     is opaque rather than glass because it overlays scrolling content, and it
+     is dark because the reference keeps every chrome surface inside the chat on
+     the indigo end of the ramp. Muted rows read at 11.6:1 here. */
+  --chat-panel-background: linear-gradient(180deg, #221058 0%, #180b3c 100%);
+  --chat-panel-foreground: var(--ht-white);
+  --chat-panel-muted: var(--ht-purple-mist);
+  --chat-panel-border: rgb(255 255 255 / 0.16);
+  --chat-panel-row-hover: rgb(255 255 255 / 0.09);
+  --chat-panel-row-active: rgb(255 255 255 / 0.16);
+  --chat-scrim: rgb(9 4 26 / 0.58);
 
   /* Status pips inside the chat header. */
   --chat-status-ok: #4ade9f;
   --chat-status-busy: var(--ht-purple-light);
+  /* Partial service — the assistant answers but one capability is down. */
+  --chat-status-warn: var(--ht-warning-on-dark);
   --chat-status-error: #ff9ec0;
 
   /* ======================================================================== */
@@ -429,30 +493,31 @@
   --warning: var(--ht-warning-on-dark);
   --danger: var(--ht-danger-on-dark);
 
-  /* Shell family. */
-  --shell-background:
-    radial-gradient(
-      120% 85% at 8% -12%,
-      var(--ht-canvas-mid) 0%,
-      transparent 58%
-    ),
-    radial-gradient(
-      95% 70% at 108% 6%,
-      rgb(124 58 237 / 0.24) 0%,
-      transparent 60%
-    ),
-    var(--ht-navy-deep);
-  --shell-sidebar: var(--ht-ink);
-  --shell-topbar: rgb(18 16 58 / 0.78);
+  /* Shell family. The shell paints the Figma ramp; the sidebar, the topbar and
+     every card on top of it are translucent so that one ramp stays visible
+     through the whole app instead of each surface inventing its own purple. */
+  --shell-background: var(--gradient-brand-bloom), var(--gradient-brand);
+  --shell-sidebar: rgb(12 6 34 / 0.55);
+  --shell-topbar: rgb(12 6 34 / 0.5);
   --shell-border: rgb(255 255 255 / 0.14);
   --shell-border-strong: rgb(255 255 255 / 0.3);
   --shell-foreground: var(--ht-white);
   --shell-heading: var(--ht-white);
   --shell-muted: var(--ht-purple-mist);
-  --shell-card: rgb(30 26 94 / 0.72);
-  --shell-card-raised: var(--ht-canvas-mid);
+  /* Glass rather than a fixed navy: a solid card turns muddy where the ramp is
+     brightest, while a white veil tracks whatever is behind it. */
+  --shell-card: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.11) 0%,
+    rgb(255 255 255 / 0.05) 100%
+  );
+  --shell-card-raised: rgb(255 255 255 / 0.14);
   --shell-well: rgb(255 255 255 / 0.07);
-  --shell-field: rgb(255 255 255 / 0.08);
+  /* Fields are darkened instead of veiled. A white veil over the bright end of
+     the ramp leaves the field and the card at the same lightness, so the input
+     stops looking like an input; ink pulls it back down and keeps the white
+     value text at 7:1 or better anywhere on the page. */
+  --shell-field: rgb(13 6 38 / 0.42);
   --shell-nav-foreground: var(--ht-purple-soft);
   --shell-nav-active-background: var(--gradient-primary);
   --shell-nav-active-foreground: var(--ht-white);

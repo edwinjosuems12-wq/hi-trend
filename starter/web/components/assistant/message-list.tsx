@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { Markdown } from "@/components/assistant/markdown";
 import { AdvisorResponseCard, type AdvisorData } from "@/components/advisor-response-card";
 import { GeneratedArtifactCard } from "@/components/generated-artifact-card";
+import { GeneratedImageCard, type ChatImage } from "@/components/assistant/generated-image-card";
 import { GeneratedVideoScriptCard } from "@/components/generated-video-script-card";
 import { VisualReviewCard, type VisualAnalysis } from "@/components/visual-review-card";
 import type { GeneratedArtifact } from "@/types/artifact";
@@ -14,6 +16,7 @@ interface Message {
   artifact?: GeneratedArtifact;
   analysis?: VisualAnalysis;
   advisor?: AdvisorData;
+  image?: ChatImage;
   artifactId?: string;
 }
 
@@ -79,7 +82,9 @@ export function MessageList({
           <div
             className={`message-bubble message-bubble--${msg.role}`}
           >
-            {msg.analysis ? (
+            {msg.image ? (
+              <GeneratedImageCard image={msg.image} />
+            ) : msg.analysis ? (
               <VisualReviewCard analysis={msg.analysis} />
             ) : msg.advisor ? (
               <AdvisorResponseCard advisor={msg.advisor} />
@@ -98,6 +103,12 @@ export function MessageList({
                 onFeedback={(rating) => onFeedback?.(msg.artifactId, rating)}
                 onCopy={() => onCopy?.(msg.artifactId)}
               />
+            ) : msg.role === "assistant" ? (
+              // Assistant turns are markdown; user turns are literal text and
+              // stay in the pre-wrapped paragraph so their line breaks survive.
+              <div className="message-text message-prose">
+                <Markdown>{msg.content}</Markdown>
+              </div>
             ) : (
               <p className="message-text">{msg.content}</p>
             )}

@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import type { Tone } from "@/types/brand";
 import {
   localeLabels,
@@ -33,6 +35,77 @@ const TONES: { value: Tone; label: string }[] = [
   { value: "direct", label: "Directo" },
   { value: "inspiring", label: "Inspirador" },
 ];
+
+/** The exact value the brand already owns, as it is written down elsewhere. */
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
+
+/**
+ * A swatch alone cannot express "this is our brand blue, code 0F62FE": picking
+ * it by eye lands one shade off. The text field is the authoritative input and
+ * the picker mirrors it, so a brand book value can be typed in verbatim.
+ */
+function BrandColorField({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  // The parent still owns the value: a change coming from anywhere else (a
+  // restored draft, the other step) has to win over what is displayed here.
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const valid = HEX_COLOR.test(draft);
+
+  function editText(raw: string) {
+    const cleaned = raw.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
+    const next = `#${cleaned.toUpperCase()}`;
+    setDraft(next);
+    // Only a complete code is committed; a half-typed one would be rejected by
+    // the API, so the last valid colour stays in force until this one is whole.
+    if (HEX_COLOR.test(next)) onChange(next);
+  }
+
+  return (
+    <div className="onboarding-color-field">
+      <label htmlFor={id}>{label}</label>
+      <div className="onboarding-color-inputs">
+        <input
+          id={id}
+          type="color"
+          value={valid ? draft : value}
+          onChange={(event) => {
+            setDraft(event.target.value.toUpperCase());
+            onChange(event.target.value.toUpperCase());
+          }}
+        />
+        <input
+          type="text"
+          className="onboarding-color-hex"
+          value={draft}
+          maxLength={7}
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="#RRGGBB"
+          aria-label={`${label} (hex)`}
+          aria-invalid={valid ? undefined : true}
+          onChange={(event) => editText(event.target.value)}
+          onBlur={() => {
+            if (!valid) setDraft(value);
+          }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export function StepBrand({
   data,
@@ -115,24 +188,18 @@ export function StepBrand({
           />
         </div>
         <div className="onboarding-color-row">
-          <div className="onboarding-color-field">
-            <label htmlFor="brand-primary-color">{copy.primaryColor}</label>
-            <input
-              id="brand-primary-color"
-              type="color"
-              value={data.primary_color || defaultBrandColors.primary}
-              onChange={(e) => onChange("primary_color", e.target.value)}
-            />
-          </div>
-          <div className="onboarding-color-field">
-            <label htmlFor="brand-secondary-color">{copy.secondaryColor}</label>
-            <input
-              id="brand-secondary-color"
-              type="color"
-              value={data.secondary_color || defaultBrandColors.secondary}
-              onChange={(e) => onChange("secondary_color", e.target.value)}
-            />
-          </div>
+          <BrandColorField
+            id="brand-primary-color"
+            label={copy.primaryColor}
+            value={data.primary_color || defaultBrandColors.primary}
+            onChange={(next) => onChange("primary_color", next)}
+          />
+          <BrandColorField
+            id="brand-secondary-color"
+            label={copy.secondaryColor}
+            value={data.secondary_color || defaultBrandColors.secondary}
+            onChange={(next) => onChange("secondary_color", next)}
+          />
         </div>
         {showContentLocale ? (
           <label htmlFor="brand-content-locale">

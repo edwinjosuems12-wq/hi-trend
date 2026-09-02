@@ -32,6 +32,20 @@ function StatusMark({ status }: { status: TrendHomeStatus | TrendSource["status"
   return <span className="trend-status-mark" data-status={status} aria-hidden="true" />;
 }
 
+/**
+ * The source summary already counts every declared source by state, so the
+ * health bar is a view of collected data rather than a new metric. Order runs
+ * from healthiest to least useful so the bar reads left to right.
+ */
+const SOURCE_STATES = [
+  "available",
+  "degraded",
+  "quota_exhausted",
+  "unavailable",
+  "unconfigured",
+  "disabled",
+] as const;
+
 export default function TrendsPage() {
   const locale = useInterfaceLocale();
   const copy = trendsCopy[locale];
@@ -100,6 +114,24 @@ export default function TrendsPage() {
       ? copy.stateHint[home.status]
       : null;
 
+  const items = home?.items ?? [];
+  // Everything below is counted from what the API already returned; nothing
+  // here estimates or projects a number the collection did not produce.
+  const evidenceCount = items.reduce(
+    (total, trend) => total + trend.evidence.length,
+    0
+  );
+  const topScore = items.reduce(
+    (highest, trend) => Math.max(highest, trend.total_score),
+    0
+  );
+  const sourceSegments = home
+    ? SOURCE_STATES.map((state) => ({
+        state,
+        count: home.sources[state] ?? 0,
+      })).filter((segment) => segment.count > 0)
+    : [];
+
   return (
     <AppShell>
       <main className="app-page trends-home">
@@ -150,6 +182,67 @@ export default function TrendsPage() {
           </p>
         ) : null}
 
+        {/* A summary of the collection itself, so the page still says something
+            when no signal survived the last run. Every figure below comes from
+            the response: nothing is estimated. */}
+        {home && !error ? (
+          <section className="trend-overview" aria-label={copy.overview.title}>
+            <dl className="trend-overview-stats">
+              <div className="trend-stat">
+                <dt>{copy.overview.signals}</dt>
+                <dd>{formatNumber(locale, items.length)}</dd>
+              </div>
+              <div className="trend-stat">
+                <dt>{copy.overview.evidence}</dt>
+                <dd>{formatNumber(locale, evidenceCount)}</dd>
+              </div>
+              <div className="trend-stat">
+                <dt>{copy.overview.sourcesActive}</dt>
+                <dd>
+                  {formatNumber(locale, home.sources.available)}
+                  <small>/{formatNumber(locale, home.sources.total)}</small>
+                </dd>
+              </div>
+              <div className="trend-stat">
+                <dt>{copy.overview.lastCollection}</dt>
+                <dd className="trend-stat-text">
+                  {home.updated_at
+                    ? dateTime(locale, home.updated_at)
+                    : copy.noUpdate}
+                </dd>
+              </div>
+            </dl>
+
+            <div className="trend-source-health">
+              <h2>{copy.overview.sourceHealth}</h2>
+              {sourceSegments.length ? (
+                <>
+                  <div className="trend-health-bar" aria-hidden="true">
+                    {sourceSegments.map((segment) => (
+                      <span
+                        key={segment.state}
+                        data-status={segment.state}
+                        style={{ flexGrow: segment.count }}
+                      />
+                    ))}
+                  </div>
+                  <ul className="trend-health-legend">
+                    {sourceSegments.map((segment) => (
+                      <li key={segment.state}>
+                        <StatusMark status={segment.state} />
+                        <span>{copy.modal.status[segment.state]}</span>
+                        <b>{formatNumber(locale, segment.count)}</b>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="muted-text">{copy.overview.sourceHealthEmpty}</p>
+              )}
+            </div>
+          </section>
+        ) : null}
+
         {home?.next_refresh_at ? (
           <p className="trend-cooldown" id="trend-cooldown" role="status">
             {copy.cooldown}:{" "}
@@ -197,6 +290,42 @@ export default function TrendsPage() {
               </div>
             </section>
 
+            {/* The status line alone left the page blank. This explains what
+                will appear here, what controls the outcome, and gives the user
+                somewhere to go meanwhile. */}
+            {!home.items.length ? (
+              <section className="trend-empty-guide">
+                <div className="trend-empty-copy">
+                  <h2>{copy.empty.title}</h2>
+                  <p>{copy.empty.lead}</p>
+                  <ol className="trend-empty-steps">
+                    {copy.empty.steps.map((step, index) => (
+                      <li key={index}>
+                        <span aria-hidden="true">{index + 1}</span>
+                        {step}
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="trend-empty-scope">
+                    <span>{copy.overview.scopeLabel}</span>
+                    <strong>
+                      {home.refresh_scope.region}
+                      {home.refresh_scope.category
+                        ? ` · ${optionLabel(locale, "category", home.refresh_scope.category)}`
+                        : ""}
+                    </strong>
+                  </p>
+                </div>
+                <aside className="trend-empty-aside">
+                  <h3>{copy.empty.studioTitle}</h3>
+                  <p>{copy.empty.studioLead}</p>
+                  <Link href="/studio/new" className="button-primary">
+                    {copy.empty.studioCta}
+                  </Link>
+                </aside>
+              </section>
+            ) : null}
+
             {home.items.length ? (
               <section className="trend-grid" aria-label={copy.title}>
                 {home.items.map((trend) => (
@@ -238,6 +367,21 @@ export default function TrendsPage() {
                         </div>
                       ) : null}
                     </dl>
+                    {/* The same score as the figure above it, drawn against
+                        the strongest signal on screen. Decorative: the number
+                        is already in the list. */}
+                    {topScore > 0 ? (
+                      <div className="trend-score-meter" aria-hidden="true">
+                        <span
+                          style={{
+                            width: `${Math.max(
+                              4,
+                              Math.round((trend.total_score / topScore) * 100)
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    ) : null}
                     <section className="trend-evidence">
                       <h3>{copy.evidence}</h3>
                       <ul>

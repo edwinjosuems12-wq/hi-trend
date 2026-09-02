@@ -17,7 +17,7 @@
     "web:test": "npm run test -w starter/web",
     "validate": "bash scripts/validate.sh",
     "validate:e2e": "bash scripts/validate-e2e.sh",
-    "backend:dev": "cd starter/backend && python -m alembic upgrade head && python -m uvicorn app.main:app --reload --port 8001 --env-file .env",
+    "backend:dev": "cd starter/backend && python -m alembic upgrade head && python -m uvicorn app.main:app --reload --port 8001 --env-file ../../.env",
     "backend:test": "PYTHONPATH=starter/backend python -m pytest starter/backend/tests",
     "beta:check": "python scripts/beta_readiness_check.py",
     "beta:load-smoke": "python scripts/load_smoke.py",

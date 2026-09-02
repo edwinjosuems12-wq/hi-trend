@@ -45,6 +45,13 @@ export function InstagramPostFlow() {
   const searchParams = useSearchParams();
   const requestedProjectId = searchParams.get("project");
   const requestedTrendId = searchParams.get("trend");
+  /**
+   * Opening a folder is a request for a new brief, not for the saved draft:
+   * the project travels as context — its template and its topic — while the
+   * form stays open so the next generation is a new post. Without the flag the
+   * same link still reopens the stored version, which is what saving needs.
+   */
+  const briefMode = searchParams.get("brief") === "1";
   const operationRef = useRef(false);
   const saveRef = useRef(false);
   const duplicateRef = useRef(false);
@@ -71,7 +78,7 @@ export function InstagramPostFlow() {
   const [generated, setGenerated] = useState<EditablePost | null>(null);
   const [draft, setDraft] = useState<EditablePost | null>(null);
   const [artifactId, setArtifactId] = useState<string | null>(null);
-  const [projectId, setProjectId] = useState<string | null>(requestedProjectId);
+  const [projectId, setProjectId] = useState<string | null>(briefMode ? null : requestedProjectId);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [flowId, setFlowId] = useState<string | null>(null);
   const [trendContext, setTrendContext] = useState<TrendDetail | null>(null);
@@ -116,6 +123,14 @@ export function InstagramPostFlow() {
             `${trendsCopy[interfaceLocale].draftPrefix}: “${trend.title}”. ${trend.summary}`
           );
         }
+        if (briefMode && project?.artifact_snapshot?.artifact_type === "social_post") {
+          const post = project.artifact_snapshot;
+          setSelected(approved.find((item) => item.id === project.source_template_id) || approved[0] || null);
+          if (!trend) setTheme(`${copy.briefFromProject}: “${post.hook}”. ${post.caption}`.slice(0, 4000));
+          const restart = await api.projects.startCreationFlow(first.id, { idempotencyKey: flowKeyRef.current });
+          if (active) setFlowId(restart.id);
+          return;
+        }
         if (project?.artifact_snapshot?.artifact_type === "social_post") {
           const post = project.artifact_snapshot;
           setProjectId(project.id); setArtifactId(project.artifact_id || null); setArtifact(post); setGenerated(editable(post)); setDraft(editable(post));
@@ -131,7 +146,7 @@ export function InstagramPostFlow() {
     return () => { active = false; };
   // Reloading a saved project must not start another flow; all other source data loads once.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [requestedProjectId, requestedTrendId]);
+  }, [requestedProjectId, requestedTrendId, briefMode]);
 
   function updateDraft(field: keyof EditablePost, value: string) {
     setDraft((current) => current ? { ...current, [field]: field === "hashtags" ? value.split(",").map((tag) => tag.trim()) : value } : current);

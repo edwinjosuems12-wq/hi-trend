@@ -60,6 +60,7 @@ const es = {
     save: "Guardar",
     cancel: "Cancelar",
     close: "Cerrar",
+    edit: "Editar",
   },
   dashboard: {
     eyebrow: "DASHBOARD",
@@ -369,6 +370,7 @@ const en: AppCopy = {
     save: "Save",
     cancel: "Cancel",
     close: "Close",
+    edit: "Edit",
   },
   dashboard: {
     eyebrow: "DASHBOARD",
@@ -674,6 +676,7 @@ const pt: AppCopy = {
     save: "Salvar",
     cancel: "Cancelar",
     close: "Fechar",
+    edit: "Editar",
   },
   dashboard: {
     eyebrow: "PAINEL",

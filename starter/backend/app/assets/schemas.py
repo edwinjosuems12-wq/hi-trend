@@ -35,3 +35,7 @@ class AssetAnalysisResult(BaseModel):
     ai_hallmarks: list[str] = Field(default_factory=list)
     canva_templates: list[CanvaTemplateRecommendation] = Field(default_factory=list)
     canva_slots_guide: dict[str, str] = Field(default_factory=dict)
+    #: What we searched Canva for, and other angles worth trying. Both seed the
+    #: refine control beside the results so the user can search again in place.
+    canva_query: str = Field(default="", max_length=200)
+    canva_query_suggestions: list[ShortText] = Field(default_factory=list, max_length=4)

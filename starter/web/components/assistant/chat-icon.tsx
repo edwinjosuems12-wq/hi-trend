@@ -10,9 +10,17 @@ export type ChatIconName =
   | "microphone"
   | "send"
   | "close"
+  | "image"
   | "spinner";
 
 const paths: Record<ChatIconName, JSX.Element> = {
+  image: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.5" />
+      <path d="m4 17 4.5-4.5L12 16l3-3 5 5" />
+    </>
+  ),
   conversations: (
     <>
       <path d="M4 7h16" />

@@ -3,6 +3,8 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { RouteSplash } from "@/components/auth/route-splash";
+
 function AssistantRedirectContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -14,12 +16,12 @@ function AssistantRedirectContent() {
         : "/studio/new"
     );
   }, [router, searchParams]);
-  return <main className="route-status">Abriendo Studio…</main>;
+  return <RouteSplash label="Abriendo Studio…" />;
 }
 
 export default function AssistantRedirect() {
   return (
-    <Suspense fallback={<main className="route-status">Abriendo Studio…</main>}>
+    <Suspense fallback={<RouteSplash label="Abriendo Studio…" />}>
       <AssistantRedirectContent />
     </Suspense>
   );

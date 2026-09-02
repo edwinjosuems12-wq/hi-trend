@@ -1,20 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type KeyboardEvent,
-} from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { ChatIcon, type ChatIconName } from "@/components/assistant/chat-icon";
 import { Composer } from "@/components/assistant/composer";
 import { Logo } from "@/components/brand/logo";
 import { MessageList } from "@/components/assistant/message-list";
+import { useAssistantStatus } from "@/components/studio/use-assistant-status";
 import { api, ApiError, createIdempotencyKey } from "@/lib/api";
+import {
+  imageGenerationMessage,
+  runImageGeneration,
+  DEFAULT_ASPECT_RATIO,
+} from "@/lib/image-generation";
 import {
   peekFirstPrompt,
   saveFirstPrompt,
@@ -23,6 +23,7 @@ import {
 import { routes } from "@/lib/routes";
 import type { GeneratedArtifact, GeneratedSocialPost } from "@/types/artifact";
 import type { AdvisorData } from "@/components/advisor-response-card";
+import type { ChatImage } from "@/components/assistant/generated-image-card";
 import type { VisualAnalysis } from "@/components/visual-review-card";
 
 type ConversationStatus = "active" | "archived";
@@ -41,6 +42,7 @@ interface ChatMessage {
   artifact?: GeneratedArtifact;
   analysis?: VisualAnalysis;
   advisor?: AdvisorData;
+  image?: ChatImage;
   artifactId?: string;
 }
 interface ConversationData {
@@ -118,7 +120,6 @@ export function StudioWorkspace({
   conversationId?: string;
 }) {
   const router = useRouter();
-  const visualFileRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const historyToggleRef = useRef<HTMLButtonElement>(null);
   const firstPromptSentRef = useRef(false);
@@ -139,8 +140,8 @@ export function StudioWorkspace({
   const [failedOperation, setFailedOperation] =
     useState<GenerationOperation | null>(null);
   const [creating, setCreating] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [uploadingVisual, setUploadingVisual] = useState(false);
   const [error, setError] = useState("");
   const [firstPrompt, setFirstPrompt] = useState<string | null>(null);
   /**
@@ -149,6 +150,7 @@ export function StudioWorkspace({
    * the scrim closes it again.
    */
   const [panelOpen, setPanelOpen] = useState(false);
+  const { assistant, refreshAssistant } = useAssistantStatus();
 
   useEffect(() => {
     return () => {
@@ -390,6 +392,13 @@ export function StudioWorkspace({
       if (reason instanceof DOMException && reason.name === "AbortError")
         return;
       if (operation.token !== operationTokenRef.current) return;
+      // A provider-side failure is exactly when the capability snapshot may
+      // have changed, so the header stops claiming the assistant is up.
+      if (
+        reason instanceof ApiError &&
+        (reason.status >= 500 || reason.status === 429 || reason.status === 402)
+      )
+        refreshAssistant();
       if (reason instanceof ApiError && reason.retryable) {
         setFailedOperation(operation);
         setError("No pudimos generar el contenido en este momento.");
@@ -440,26 +449,91 @@ export function StudioWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, threadReady]);
 
-  async function uploadVisual(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file || !conversationId) return;
-    setUploadingVisual(true);
-    try {
-      const uploaded = await api.assets.upload(file);
-      const assetId = uploaded.asset_id as string | undefined;
-      if (!assetId) throw new Error("La imagen no se pudo preparar.");
-      await send("Analiza esta imagen para mi negocio.", "analyze_visual", [
-        assetId,
-      ]);
-    } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason.message
-          : "No pudimos subir la imagen."
+  /**
+   * Uploading is now separate from sending: the composer holds the attachment
+   * as a preview chip so a pasted screenshot can be captioned, replaced or
+   * removed before anything reaches the assistant.
+   */
+  async function uploadVisual(file: File): Promise<string> {
+    const uploaded = await api.assets.upload(file);
+    const assetId = uploaded.asset_id as string | undefined;
+    if (!assetId) throw new Error("La imagen no se pudo preparar.");
+    return assetId;
+  }
+
+  /**
+   * An attached image is always a request to look at that image, so the intent
+   * follows the attachment rather than asking the user to declare it.
+   */
+  function sendFromComposer(text: string, attachmentIds: string[]) {
+    void send(
+      text,
+      attachmentIds.length ? "analyze_visual" : "create_social_post",
+      attachmentIds
+    );
+  }
+
+  /**
+   * Generating an image is a request of its own: it does not go through the
+   * conversation endpoint, which has no image intent, so the turn is composed
+   * here and the durable job is watched until it lands.
+   *
+   * The result lives in this thread's view only. The image itself is durable
+   * and reachable from the library; the chat is not its record.
+   */
+  async function generateImage(prompt: string) {
+    if (generatingImage) return;
+    const token = `image_${Date.now()}`;
+    setGeneratingImage(true);
+    setError("");
+    setMessages((current) => [
+      ...current,
+      { id: `${token}_user`, role: "user", content: prompt },
+      {
+        id: token,
+        role: "assistant",
+        content: "",
+        image: {
+          state: "working",
+          prompt,
+          aspectRatio: DEFAULT_ASPECT_RATIO,
+          message: "Preparando la descripción visual…",
+        },
+      },
+    ]);
+
+    function update(image: Partial<ChatImage>) {
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === token && message.image
+            ? { ...message, image: { ...message.image, ...image } }
+            : message
+        )
       );
+    }
+
+    try {
+      const businesses = await api.businesses.list();
+      if (!businesses.length) {
+        router.push(routes.onboarding);
+        return;
+      }
+      const result = await runImageGeneration(prompt, {
+        businessId: businesses[0].id as string,
+        onProgress: (message) => update({ message }),
+      });
+      update({ state: "ready", url: result.url, budget: result.budget });
+    } catch (reason) {
+      // The capability snapshot is worth re-reading here for the same reason
+      // as a failed generation: this is when it changes.
+      if (
+        reason instanceof ApiError &&
+        (reason.status >= 500 || reason.status === 429 || reason.status === 402)
+      )
+        refreshAssistant();
+      update({ state: "failed", message: imageGenerationMessage(reason) });
     } finally {
-      setUploadingVisual(false);
-      event.target.value = "";
+      setGeneratingImage(false);
     }
   }
 
@@ -564,6 +638,46 @@ export function StudioWorkspace({
       aria-label="Studio de contenido"
       onKeyDown={handleLayoutKeyDown}
     >
+      {/* Spans the rail and the canvas, as in the reference: the wordmark sits
+          above the icon column rather than beside it. */}
+      <header className="studio-header">
+        <Logo inverse />
+        {/* Read from the capability snapshot, never assumed: the pip and the
+            wording follow whatever the server reports for the advisor and the
+            visual review. */}
+        <p
+          className="studio-status"
+          data-tone={assistant.tone}
+          title={assistant.detail}
+          aria-live="polite"
+        >
+          <span aria-hidden="true" /> {assistant.label}
+        </p>
+        {conversationId ? (
+          <h1 className="visually-hidden">
+            {activeConversation?.title || "Conversación"}
+          </h1>
+        ) : null}
+        <div className="studio-header-actions">
+          <Link
+            href={routes.dashboard}
+            className="studio-header-button"
+            title="Ir al inicio"
+          >
+            <ChatIcon name="home" />
+            <span className="visually-hidden">Ir al inicio</span>
+          </Link>
+          <Link
+            href={routes.settings}
+            className="studio-header-button"
+            title="Abrir ajustes"
+          >
+            <ChatIcon name="settings" />
+            <span className="visually-hidden">Abrir ajustes</span>
+          </Link>
+        </div>
+      </header>
+
       {/* The rail is icon-only by design, so every control keeps its label in
           the accessible name and repeats it in `title` for sighted hover. */}
       <nav className="studio-rail" aria-label="Acciones de Studio">
@@ -728,36 +842,6 @@ export function StudioWorkspace({
       ) : null}
 
       <div className="studio-main">
-        <header className="studio-header">
-          <Logo inverse />
-          <p className="studio-status">
-            <span aria-hidden="true" /> Asistente disponible
-          </p>
-          {conversationId ? (
-            <h1 className="visually-hidden">
-              {activeConversation?.title || "Conversación"}
-            </h1>
-          ) : null}
-          <div className="studio-header-actions">
-            <Link
-              href={routes.dashboard}
-              className="studio-header-button"
-              title="Ir al inicio"
-            >
-              <ChatIcon name="home" />
-              <span className="visually-hidden">Ir al inicio</span>
-            </Link>
-            <Link
-              href={routes.settings}
-              className="studio-header-button"
-              title="Abrir ajustes"
-            >
-              <ChatIcon name="settings" />
-              <span className="visually-hidden">Abrir ajustes</span>
-            </Link>
-          </div>
-        </header>
-
         {conversationId ? (
           <>
             {error ? (
@@ -818,23 +902,19 @@ export function StudioWorkspace({
                       Crear guion
                     </button>
                   </div>
-                  <input
-                    ref={visualFileRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={uploadVisual}
-                    disabled={loading || uploadingVisual}
-                    className="visually-hidden"
-                    aria-label="Subir imagen para analizar"
-                  />
                   <Composer
-                    onSend={send}
+                    onSend={sendFromComposer}
                     disabled={loading}
                     draftKey={conversationId}
-                    onAttach={() => visualFileRef.current?.click()}
+                    onUploadImage={uploadVisual}
                     attachLabel="Adjuntar una imagen para analizar"
-                    attachBusy={uploadingVisual}
+                    onGenerateImage={generateImage}
+                    imageBusy={generatingImage}
                   />
+                  <p className="composer-hint">
+                    Pega una captura con Ctrl+V, arrástrala aquí o usa + para
+                    subirla. La analizamos y te proponemos plantillas de Canva.
+                  </p>
                 </div>
               </>
             )}
@@ -860,15 +940,9 @@ export function StudioWorkspace({
                   {error}
                 </p>
               ) : null}
-              <Composer
-                onSend={startConversationWith}
-                disabled={creating}
-                draftKey="nueva-conversacion"
-                placeholder="Escribe tu idea o pregunta…"
-                onAttach={createConversation}
-                attachLabel="Adjuntar contenido en una conversación nueva"
-                attachBusy={creating}
-              />
+              {/* Suggestions first: on an empty screen they are what tells the
+                  user what this field is for, so they read before it, not
+                  after. */}
               <div className="studio-quick-grid">
                 {QUICK_ACTIONS.map((action) => (
                   <button
@@ -883,6 +957,15 @@ export function StudioWorkspace({
                   </button>
                 ))}
               </div>
+              <Composer
+                onSend={startConversationWith}
+                disabled={creating}
+                draftKey="nueva-conversacion"
+                placeholder="Escribe tu idea o pregunta…"
+                onAttach={createConversation}
+                attachLabel="Adjuntar contenido en una conversación nueva"
+                attachBusy={creating}
+              />
             </div>
           </section>
         )}

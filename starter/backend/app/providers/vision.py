@@ -2,12 +2,127 @@ import base64
 import json
 import re
 import urllib.parse
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
 
 from app.core.errors import AppError
+
+# --------------------------------------------------------------------------- #
+# Canva search
+#
+# Canva ranks a search on a handful of words and scopes it by the format in the
+# path. The previous queries pasted whole business fields into a generic
+# /templates/ search, which came back with presentations and posters for an
+# Instagram brief. Everything below builds short, format-scoped searches
+# instead, and is the single place a Canva URL is produced.
+# --------------------------------------------------------------------------- #
+
+CANVA_SEARCH_BASE = "https://www.canva.com/templates/"
+
+#: Format-scoped search paths. The key is what callers ask for; the value is
+#: the Canva listing that only returns that format.
+CANVA_FORMAT_PATHS = {
+    "instagram_post": "https://www.canva.com/instagram-posts/templates/",
+    "instagram_story": "https://www.canva.com/instagram-stories/templates/",
+    "facebook_post": "https://www.canva.com/facebook-posts/templates/",
+    "flyer": "https://www.canva.com/flyers/templates/",
+    "poster": "https://www.canva.com/posters/templates/",
+}
+
+#: Hosts a recommendation is allowed to point at.
+_CANVA_HOSTS = ("canva.com", "canva.link")
+
+#: Function words carry no search signal and crowd out the terms that do.
+_QUERY_STOPWORDS = frozenset(
+    {
+        "de", "del", "la", "el", "lo", "los", "las", "un", "una", "unos", "unas",
+        "y", "o", "u", "a", "al", "en", "con", "por", "para", "sin", "sobre",
+        "que", "como", "mas", "muy", "tu", "tus", "mi", "mis", "su", "sus",
+        "nuestro", "nuestra", "the", "and", "for", "of", "our", "your",
+    }
+)
+
+_WORD_SPLIT = re.compile(r"[^0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+")
+
+
+def canva_keywords(*parts: str | None, limit: int = 5) -> list[str]:
+    """Reduce free-text business fields to a short, de-duplicated term list.
+
+    Parts are consumed in order, so the caller decides what survives the cap.
+    """
+    words: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        if not part:
+            continue
+        for raw in _WORD_SPLIT.split(part.strip().lower()):
+            if len(raw) < 3 or raw in _QUERY_STOPWORDS or raw in seen:
+                continue
+            seen.add(raw)
+            words.append(raw)
+            if len(words) >= limit:
+                return words
+    return words
+
+
+def canva_search_url(terms: Sequence[str] | str, *, fmt: str = "instagram_post") -> str:
+    """Build a format-scoped Canva template search for ``terms``."""
+    base = CANVA_FORMAT_PATHS.get(fmt, CANVA_SEARCH_BASE)
+    joined = terms if isinstance(terms, str) else " ".join(terms)
+    query = urllib.parse.quote_plus(joined.strip())
+    return f"{base}?query={query}" if query else base
+
+
+def normalize_canva_url(url: object, fallback_terms: Sequence[str]) -> str:
+    """Keep provider-supplied links that really point at Canva, replace the rest.
+
+    A model asked for a URL will happily invent a host or a template id that
+    404s, so anything off Canva is swapped for a search we know resolves.
+    """
+    if isinstance(url, str) and url.strip():
+        parsed = urllib.parse.urlsplit(url.strip())
+        host = parsed.netloc.lower().removeprefix("www.")
+        if parsed.scheme in {"http", "https"} and host in _CANVA_HOSTS:
+            return urllib.parse.urlunsplit(
+                ("https", parsed.netloc, parsed.path, parsed.query, "")
+            )
+    return canva_search_url(fallback_terms)
+
+
+def build_canva_search_plan(request: "VisionReviewRequest") -> dict:
+    """Derive the searches to offer for one business, plus refinement seeds.
+
+    Three angles rather than three phrasings of the same one: the promotion,
+    the product shot and the brand piece are the posts a small business
+    actually needs, and each wants a different template.
+    """
+    product = request.primary_product or ""
+    category = request.business_category or ""
+    audience = request.target_audience or ""
+
+    promo = canva_keywords(product, category, "promocion oferta", limit=5)
+    product_shot = canva_keywords(product, "foto producto minimalista", limit=5)
+    brand = canva_keywords(category, audience, "marca moderno elegante", limit=5)
+    primary = promo or product_shot or brand or ["negocio local promocion"]
+
+    return {
+        "primary": primary,
+        "promo": promo or primary,
+        "product": product_shot or primary,
+        "brand": brand or primary,
+        # Offered as one-tap chips beside the results: different looks for the
+        # same brief, which is what a user reaches for after seeing the picks.
+        "suggestions": [
+            " ".join(canva_keywords(product, "minimalista", limit=3)) or "minimalista",
+            " ".join(canva_keywords(product, category, "descuento", limit=3))
+            or "descuento",
+            " ".join(canva_keywords(category, "tipografia grande", limit=3))
+            or "tipografia grande",
+        ],
+    }
 
 
 @dataclass(frozen=True)
@@ -23,6 +138,10 @@ class VisionReviewRequest:
     primary_product: str | None = None
     target_audience: str | None = None
     city: str | None = None
+    #: What the user actually asked about this image, when they asked anything.
+    #: The review is the same either way; this decides what the answer leads
+    #: with, so an uploaded image stops producing one fixed audit.
+    question: str | None = None
 
 
 class VisionReviewProvider(Protocol):
@@ -46,12 +165,22 @@ class DemoVisionReviewProvider:
         category = request.business_category or "comercio"
         audience = request.target_audience or "tus clientes"
 
-        q_promo = urllib.parse.quote_plus(f"post instagram {product} {category} promocion")
-        q_product = urllib.parse.quote_plus(f"post instagram {product} oferta elegante")
-        q_minimal = urllib.parse.quote_plus(f"post instagram {biz_name} {category} moderno")
+        plan = build_canva_search_plan(request)
+
+        # This evaluator never looks at the pixels, and it is also the fallback
+        # when the visual model fails. Either way it must not answer a question
+        # as if it had seen the image, so it says what it is doing instead.
+        question = (request.question or "").strip()
+        asked = (
+            f"Sobre tu pregunta (“{question[:200]}”): no pudimos leer la imagen con el "
+            "modelo visual, así que respondemos con la auditoría estándar. "
+            if question
+            else ""
+        )
 
         summary = (
-            f"Auditoría visual completada para {biz_name}: Analizamos la imagen orientada a {product}. "
+            asked
+            + f"Auditoría visual completada para {biz_name}: Analizamos la imagen orientada a {product}. "
             f"Detectamos oportunidades clave de mejora en la jerarquía del texto, legibilidad en móviles y contraste visual. "
             f"Para elevar la percepción de marca frente a {audience}, te recomendamos aplicar plantillas de Canva curadas por diseñadores."
         )
@@ -90,22 +219,22 @@ class DemoVisionReviewProvider:
 
         canva_templates = [
             {
-                "title": f"Plantillas Canva: Post Promocional ({category.capitalize()})",
-                "canva_url": f"https://www.canva.com/templates/?query={q_promo}",
+                "title": f"Post promocional para {category}",
+                "canva_url": canva_search_url(plan["promo"]),
                 "thumbnail_url": "/templates/flores.png",
-                "reason": f"Diseños en Canva listos para editar con estructura balanceada para destacar {product}.",
+                "reason": f"Estructura equilibrada para anunciar {product} con la oferta visible.",
             },
             {
-                "title": f"Plantillas Canva: Producto Destacado & Oferta",
-                "canva_url": f"https://www.canva.com/templates/?query={q_product}",
+                "title": "Producto destacado con foto grande",
+                "canva_url": canva_search_url(plan["product"]),
                 "thumbnail_url": "/templates/coffee.png",
-                "reason": "Plantillas profesionales con espacios optimizados para fotos de alta calidad y titulares limpios.",
+                "reason": "Deja la fotografía como protagonista y el titular limpio encima.",
             },
             {
-                "title": f"Plantillas Canva: Identidad de Marca & Servicios",
-                "canva_url": f"https://www.canva.com/templates/?query={q_minimal}",
+                "title": f"Identidad de marca de {biz_name}",
+                "canva_url": canva_search_url(plan["brand"]),
                 "thumbnail_url": "/templates/menu.png",
-                "reason": f"Formatos modernos y elegantes para consolidar la imagen de {biz_name} en Instagram y Facebook.",
+                "reason": f"Formatos sobrios para consolidar la imagen frente a {audience}.",
             },
         ]
 
@@ -129,6 +258,8 @@ class DemoVisionReviewProvider:
             "ai_hallmarks": ai_hallmarks,
             "canva_templates": canva_templates,
             "canva_slots_guide": canva_slots_guide,
+            "canva_query": " ".join(plan["primary"]),
+            "canva_query_suggestions": plan["suggestions"],
             "revised_copy": revised_copy,
             "accessibility_notes": accessibility_notes,
         }
@@ -153,6 +284,7 @@ class OpenAICompatibleVisionReviewProvider:
             return await DemoVisionReviewProvider().analyze(request=request)
         image_data = base64.b64encode(request.image_bytes).decode("ascii")
         biz_info = f"Negocio: {request.business_name or 'Comercio'}, Producto: {request.primary_product or 'Producto'}, Categoría: {request.business_category or 'General'}"
+        question = (request.question or "").strip()
         rubric = {
             "business_context": biz_info,
             "image": {
@@ -160,18 +292,35 @@ class OpenAICompatibleVisionReviewProvider:
                 "width": request.width,
                 "height": request.height,
             },
+            # Untrusted user text. It steers what the answer opens with; it
+            # never replaces the instructions or the required JSON shape.
+            "user_question": question or None,
             "instructions": (
+                (
+                    "El usuario preguntó lo siguiente sobre la imagen: "
+                    f"\"{question[:400]}\". Responde ESA pregunta en 'summary', "
+                    "en las primeras frases y de forma directa, mirando la imagen. "
+                    "Después continúa con la evaluación. Si la pregunta no tiene "
+                    "relación con la imagen, dilo y evalúa la imagen igualmente. "
+                    if question
+                    else ""
+                )
+                + (
                 "Eres un experto en diseño gráfico y redes sociales. Evalúa la imagen comercial subida por el usuario. "
                 "1. Diagnostica si tiene aspectos amateur o hechos por IA (tipografías sin contraste, artefactos, sobrecarga, textos deformados). "
                 "2. Explica qué mejorar (jerarquía, contraste, legibilidad, llamado a la acción). "
-                "3. En 'canva_templates', genera 2 o 3 opciones donde 'canva_url' sea una URL real de búsqueda en Canva con query precisa basada en el nicho del negocio y los colores recomendados, por ejemplo 'https://www.canva.com/templates/?query=post+instagram+restaurante+moderno+rojo+y+blanco' o 'https://www.canva.com/templates/?query=post+instagram+tienda+ropa+minimalista'. "
-                "4. Proporciona en 'canva_slots_guide' los textos clave para pegar en Canva (headline, body, cta). "
+                "3. En 'canva_templates', propón 2 o 3 plantillas distintas entre sí (promoción, producto destacado, marca). "
+                "Para cada una escribe 'canva_query': de 3 a 5 palabras de búsqueda en español, sin la palabra 'Canva' ni el formato "
+                "(por ejemplo 'restaurante promocion rojo' o 'tienda ropa minimalista'). NO escribas URLs: nosotros construimos el enlace. "
+                "4. En 'canva_query_suggestions' añade 3 búsquedas alternativas cortas por si el usuario quiere otro estilo. "
+                "5. Proporciona en 'canva_slots_guide' los textos clave para pegar en Canva (headline, body, cta). "
                 "Devuelve ÚNICAMENTE un JSON válido con las claves: "
                 "summary, strengths (lista), improvements (lista con priority, area, reason, action), "
                 "ai_hallmarks (lista de 2-4 aspectos de IA o diseño detectados), "
-                "canva_templates (lista de objetos con: title, canva_url, reason), "
+                "canva_templates (lista de objetos con: title, canva_query, reason), "
+                "canva_query_suggestions (lista de 3 strings cortos), "
                 "canva_slots_guide (objeto con headline, body, cta), revised_copy (string), accessibility_notes (lista)."
-            ),
+            )),
         }
         payload = {
             "model": self._model_name,
@@ -210,12 +359,45 @@ class OpenAICompatibleVisionReviewProvider:
             if start != -1 and end != -1:
                 content = content[start : end + 1]
             parsed = json.loads(content)
-            # Ensure canva_templates have valid URLs
-            if "canva_templates" in parsed and isinstance(parsed["canva_templates"], list):
-                for tpl in parsed["canva_templates"]:
-                    if isinstance(tpl, dict) and not tpl.get("canva_url", "").startswith("http"):
-                        query = urllib.parse.quote_plus(tpl.get("title", "post instagram negocio"))
-                        tpl["canva_url"] = f"https://www.canva.com/templates/?query={query}"
-            return parsed
+            return self._resolve_canva_links(parsed, request)
         except Exception:
             return await DemoVisionReviewProvider().analyze(request=request)
+
+    @staticmethod
+    def _resolve_canva_links(parsed: dict, request: VisionReviewRequest) -> dict:
+        """Turn the model's search terms into links, and vet any it invented.
+
+        The model is good at naming what to search for and bad at URLs, so the
+        terms are what we ask for and the URL is built here. Anything it sent
+        anyway still has to survive :func:`normalize_canva_url`.
+        """
+        plan = build_canva_search_plan(request)
+        fallbacks = [plan["promo"], plan["product"], plan["brand"]]
+
+        templates = parsed.get("canva_templates")
+        if isinstance(templates, list):
+            for index, template in enumerate(templates):
+                if not isinstance(template, dict):
+                    continue
+                fallback = fallbacks[index % len(fallbacks)]
+                query = template.pop("canva_query", None)
+                if isinstance(query, str) and query.strip():
+                    template["canva_url"] = canva_search_url(
+                        canva_keywords(query, limit=5) or fallback
+                    )
+                else:
+                    template["canva_url"] = normalize_canva_url(
+                        template.get("canva_url"), fallback
+                    )
+
+        suggestions = parsed.get("canva_query_suggestions")
+        if not isinstance(suggestions, list) or not suggestions:
+            parsed["canva_query_suggestions"] = plan["suggestions"]
+        else:
+            parsed["canva_query_suggestions"] = [
+                str(item).strip() for item in suggestions[:4] if str(item).strip()
+            ]
+
+        if not isinstance(parsed.get("canva_query"), str) or not parsed["canva_query"].strip():
+            parsed["canva_query"] = " ".join(plan["primary"])
+        return parsed

@@ -114,7 +114,8 @@ describe("Trends Home", () => {
     const { container } = render(<TrendsPage />);
 
     expect(await screen.findByRole("heading", { name: "Café frío local" })).toBeInTheDocument();
-    expect(screen.getAllByText(/30 jul 2026/i)).toHaveLength(2);
+    // Card date, evidence date, and the collection overview at the top.
+    expect(screen.getAllByText(/30 jul 2026/i)).toHaveLength(3);
     expect(screen.getByRole("link", { name: "Noticias locales" })).toHaveAttribute(
       "href",
       evidence.source_url
@@ -162,6 +163,45 @@ describe("Trends Home", () => {
     vi.spyOn(api.trends, "home").mockResolvedValue(home(status));
     render(<TrendsPage />);
     expect(await screen.findByText(new RegExp(label, "i"))).toBeInTheDocument();
+  });
+
+  test("keeps the collection visible when there are no signals", async () => {
+    const empty = {
+      ...home("empty"),
+      sources: {
+        total: 3,
+        available: 1,
+        degraded: 1,
+        quota_exhausted: 0,
+        unavailable: 1,
+        unconfigured: 0,
+        disabled: 0,
+      },
+    };
+    vi.spyOn(api.trends, "home").mockResolvedValue(empty);
+    const { container } = render(<TrendsPage />);
+
+    // The overview counts what the API returned; it never fills the gap with
+    // an invented figure.
+    expect(
+      await screen.findByText("Todavía no hay señales que mostrar")
+    ).toBeInTheDocument();
+    const signals = screen.getByText("Señales visibles").parentElement!;
+    expect(within(signals).getByText("0")).toBeInTheDocument();
+    const active = screen.getByText("Fuentes activas").parentElement!;
+    expect(active.textContent).toContain("1");
+    expect(active.textContent).toContain("/3");
+    expect(screen.getByText("Estado de las fuentes")).toBeInTheDocument();
+    expect(screen.getByText("Degradada")).toBeInTheDocument();
+    expect(screen.getByText("No disponible")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Abrir el Studio" })
+    ).toHaveAttribute("href", "/studio/new");
+
+    const results = await axe(container, {
+      rules: { "color-contrast": { enabled: false } },
+    });
+    expect(results.violations).toEqual([]);
   });
 
   test("shows cooldown and does not offer refresh before its deadline", async () => {

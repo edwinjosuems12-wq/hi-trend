@@ -345,8 +345,13 @@ async def send_message_endpoint(
             )
 
         if intent == "analyze_visual":
+            # The message that came with the image is the question to answer:
+            # an upload is not always a request for the same fixed audit.
             analysis_record, analysis, review_mode = await analyze_authorized_asset(
-                db, workspace_id=workspace_id, asset_id=body.attachment_ids[0]
+                db,
+                workspace_id=workspace_id,
+                asset_id=body.attachment_ids[0],
+                question=body.text,
             )
             analysis_data = analysis_to_dict(analysis_record, analysis, review_mode)
             assistant_msg = await add_message(

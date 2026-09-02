@@ -20,8 +20,10 @@ async def analyze_authorized_asset(
     *,
     workspace_id: str,
     asset_id: str,
+    question: str | None = None,
     provider_factory: Callable[[], VisionReviewProvider] | None = None,
 ) -> tuple[AssetAnalysis, AssetAnalysisResult, str]:
+    """Review one authorized image, answering ``question`` when there is one."""
     result = await db.execute(
         select(Asset).where(Asset.id == asset_id, Asset.workspace_id == workspace_id)
     )
@@ -55,6 +57,7 @@ async def analyze_authorized_asset(
                     primary_product=biz_context.primary_product if biz_context else None,
                     target_audience=biz_context.target_audience if biz_context else None,
                     city=biz_context.city if biz_context else None,
+                    question=question,
                 )
             )
         )
@@ -94,6 +97,8 @@ def analysis_to_dict(
         "ai_hallmarks": getattr(analysis, "ai_hallmarks", []),
         "canva_templates": [t.model_dump() if hasattr(t, "model_dump") else t for t in getattr(analysis, "canva_templates", [])],
         "canva_slots_guide": getattr(analysis, "canva_slots_guide", {}),
+        "canva_query": getattr(analysis, "canva_query", ""),
+        "canva_query_suggestions": getattr(analysis, "canva_query_suggestions", []),
         "review_mode": review_mode,
         "created_at": record.created_at.isoformat() if record.created_at else None,
     }

@@ -1292,8 +1292,13 @@ export const api = {
     sendMessage(
       conversationId: string,
       text: string,
+      // Mirrors the four intents the endpoint accepts. `ask_advisor` is what
+      // the weekly plan is asked for, and it was missing here.
       uiIntent?:
-        "create_social_post" | "create_short_video_script" | "analyze_visual",
+        | "create_social_post"
+        | "create_short_video_script"
+        | "analyze_visual"
+        | "ask_advisor",
       attachmentIds: string[] = [],
       options: Pick<
         ApiRequestOptions,

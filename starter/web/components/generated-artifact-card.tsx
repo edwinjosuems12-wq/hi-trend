@@ -1,6 +1,7 @@
-import { useId, useState, useEffect, useCallback, useRef } from "react";
+import { useId, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import type { GeneratedSocialPost, VariationKind } from "@/types/artifact";
 import { api, createIdempotencyKey } from "@/lib/api";
+import { suggestCanvaTemplate } from "@/lib/canva-templates";
 import type { ImageAspectRatio, VisualBrief } from "@/types/images";
 
 interface Props {
@@ -49,6 +50,14 @@ export function GeneratedArtifactCard({
           aspect_ratio: ratio,
         });
 
+        // Preflight is the step that authorizes and budgets the image: without
+        // its token there is nothing to confirm, so the request stops here.
+        if (!preflight.allowed || !preflight.approval_token) {
+          throw new Error(
+            preflight.message || "No puedes generar más imágenes por ahora."
+          );
+        }
+
         const idempotencyKey = createIdempotencyKey();
         const job = await api.images.createJob(
           {
@@ -76,7 +85,7 @@ export function GeneratedArtifactCard({
             currentJob.status === "cancelled"
           ) {
             throw new Error(
-              currentJob.error_message || "La generación de imagen no pudo completarse."
+              currentJob.error || "La generación de imagen no pudo completarse."
             );
           } else {
             await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -122,14 +131,16 @@ export function GeneratedArtifactCard({
     }
   }
 
-  const canvaSearchTerms = artifact.hashtags
-    .filter((h) => !h.toLowerCase().includes("hitrendy") && !h.toLowerCase().includes("contenidoparanegocios"))
-    .map((h) => h.replace(/^#/, ""))
-    .join(" ") || artifact.hook.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s]/g, "");
-
-  const canvaUrl = `https://www.canva.com/templates/?query=${encodeURIComponent(
-    `post instagram ${canvaSearchTerms || "negocio promocion"}`
-  )}`;
+  // The link is built from the subject of the post, not from whatever hashtags
+  // came back: a technology post has to open technology templates.
+  const canva = useMemo(() => suggestCanvaTemplate(artifact), [artifact]);
+  const canvaUrl = canva.url;
+  const extraHashtags = canva.hashtags.filter(
+    (tag) =>
+      !artifact.hashtags.some(
+        (own) => own.replace(/^#/, "").toLowerCase() === tag.replace(/^#/, "").toLowerCase()
+      )
+  );
 
   return (
     <article className="artifact-card" aria-labelledby={titleId}>
@@ -155,7 +166,7 @@ export function GeneratedArtifactCard({
           }}
         >
           <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span>🎨</span> Plantilla Canva Recomendada
+            <span>🎨</span> Plantilla Canva para {canva.label}
           </h3>
           <a
             href={canvaUrl}
@@ -180,8 +191,16 @@ export function GeneratedArtifactCard({
         </div>
 
         <p style={{ margin: "0 0 0.75rem", fontSize: "0.85rem", color: "#d4d4d8", lineHeight: 1.5 }}>
-          Plantilla lista para editar en Canva con tus colores y tipografías oficiales.
+          Búsqueda preparada para ti: «{canva.query}». Ábrela y edita la plantilla
+          con tus colores y tipografías oficiales.
         </p>
+
+        {extraHashtags.length ? (
+          <p style={{ margin: "0 0 0.75rem", fontSize: "0.8rem", color: "#a1a1aa", lineHeight: 1.6 }}>
+            Hashtags de {canva.label.toLowerCase()} para acompañar el post:{" "}
+            <span style={{ color: "#e4e4e7", fontWeight: 600 }}>{extraHashtags.join(" ")}</span>
+          </p>
+        ) : null}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginTop: "0.5rem" }}>
           <div style={{ padding: "0.6rem", background: "rgba(0,0,0,0.3)", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.06)" }}>

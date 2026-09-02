@@ -33,6 +33,18 @@ vi.mock("@/lib/api", () => ({
       sendMessage: vi.fn(),
     },
     businesses: { list: vi.fn() },
+    // The header reads the real capability snapshot instead of claiming the
+    // assistant is up, so every render of the workspace calls this.
+    capabilities: {
+      get: vi.fn().mockResolvedValue({
+        advisor: { status: "available", tier: "free", quality_levels: ["fast"] },
+        vision_review: {
+          status: "available",
+          tier: "free",
+          quality_levels: ["fast"],
+        },
+      }),
+    },
     assets: { upload: vi.fn() },
     projects: { create: vi.fn() },
     artifacts: {

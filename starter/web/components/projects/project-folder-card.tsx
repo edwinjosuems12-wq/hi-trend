@@ -47,8 +47,11 @@ export function ProjectFolderCard({
         position: "relative",
       }}
     >
+      {/* Opening a folder starts a brief: the guided flow loads this project as
+          its context, so every visit produces a fresh draft instead of parking
+          the user in the editor. The saved version stays one click away. */}
       <Link
-        href={`/projects/${project.id}`}
+        href={`/studio/new?project=${encodeURIComponent(project.id)}&brief=1`}
         className="project-folder-link"
         style={{
           textDecoration: "none",
@@ -242,7 +245,21 @@ export function ProjectFolderCard({
       </Link>
 
       {/* Archive / Restore Button */}
-      <div style={{ marginTop: "0.5rem", display: "flex", justifyContent: "flex-end" }}>
+      <div style={{ marginTop: "0.5rem", display: "flex", justifyContent: "space-between", gap: "0.5rem" }}>
+        <Link
+          href={`/projects/${encodeURIComponent(project.id)}`}
+          className="project-folder-edit"
+          style={{
+            padding: "0.3rem 0.65rem",
+            fontSize: "0.72rem",
+            borderRadius: "6px",
+            border: "1px solid rgba(255, 255, 255, 0.1)",
+            color: "#cbd5e1",
+            textDecoration: "none",
+          }}
+        >
+          {copy.common.edit}
+        </Link>
         <button
           type="button"
           onClick={(e) => {

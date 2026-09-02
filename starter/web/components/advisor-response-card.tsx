@@ -2,6 +2,8 @@
 
 import { useId, useState } from "react";
 
+import { printPlan } from "@/lib/plan-export";
+
 export interface AdvisorRecommendation {
   title: string;
   description: string;
@@ -52,7 +54,15 @@ export function AdvisorResponseCard({ advisor }: Props) {
       }}
       aria-labelledby={titleId}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "12px" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "8px",
+          marginBottom: "12px",
+        }}
+      >
         <span
           style={{
             background: "rgba(99, 102, 241, 0.15)",
@@ -67,6 +77,16 @@ export function AdvisorResponseCard({ advisor }: Props) {
         >
           💡 Plan de Contenido & Asesoría
         </span>
+        {/* The plan is something a business takes off the screen: printing it
+            from an isolated frame is what turns it into a PDF file, with no
+            extra dependency and nothing the browser will block. */}
+        <button
+          type="button"
+          className="advisor-export"
+          onClick={() => printPlan(advisor)}
+        >
+          Descargar PDF
+        </button>
       </div>
 
       <section style={{ marginBottom: "18px" }}>
