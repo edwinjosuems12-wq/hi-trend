@@ -1107,6 +1107,10 @@ export const surfaceCopy = {
       unavailable: "Vista previa no disponible",
       loading: "Preparando catálogo…",
       error: "No pudimos comprobar las plantillas.",
+      carousel: "Plantillas recomendadas para tu negocio",
+      previous: "Anterior",
+      next: "Siguiente",
+      whyPrefix: "Por qué",
     },
     auth: {
       demoLabel: "Contenido de ejemplo de HiTrendy",
@@ -1244,6 +1248,10 @@ export const surfaceCopy = {
       unavailable: "Preview unavailable",
       loading: "Preparing catalog…",
       error: "We could not check the templates.",
+      carousel: "Templates recommended for your business",
+      previous: "Previous",
+      next: "Next",
+      whyPrefix: "Why",
     },
     auth: {
       demoLabel: "HiTrendy sample content",
@@ -1380,6 +1388,10 @@ export const surfaceCopy = {
       unavailable: "Prévia indisponível",
       loading: "Preparando catálogo…",
       error: "Não foi possível verificar os templates.",
+      carousel: "Modelos recomendados para o seu negócio",
+      previous: "Anterior",
+      next: "Próximo",
+      whyPrefix: "Por quê",
     },
     auth: {
       demoLabel: "Conteúdo de exemplo da HiTrendy",

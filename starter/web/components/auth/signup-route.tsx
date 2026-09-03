@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
+import { RouteSplash } from "@/components/auth/route-splash";
 import { api, ApiError } from "@/lib/api";
 import { routes } from "@/lib/routes";
 
@@ -47,15 +48,15 @@ export function SignupRoute({ children }: { children: ReactNode }) {
   }, [router]);
 
   if (state === "checking") {
-    return <main className="route-status">Recuperando tu registro…</main>;
+    return <RouteSplash label="Recuperando tu registro…" />;
   }
 
   if (state === "error") {
     return (
-      <main className="route-status" role="alert">
-        No pudimos recuperar tu registro. Actualiza la página para intentarlo
-        de nuevo.
-      </main>
+      <RouteSplash tone="error">
+        No pudimos recuperar tu registro. Actualiza la página para intentarlo de
+        nuevo.
+      </RouteSplash>
     );
   }
 

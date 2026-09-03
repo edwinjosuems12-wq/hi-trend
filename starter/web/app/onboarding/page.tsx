@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { RouteSplash } from "@/components/auth/route-splash";
 import { SignupRoute } from "@/components/auth/signup-route";
 import { Logo } from "@/components/brand/logo";
 import { ProgressBar } from "@/components/onboarding/progress-bar";
@@ -425,7 +426,7 @@ export default function OnboardingPage() {
   }
 
   if (!loaded) {
-    return <main className="route-status">{copy.loading}</main>;
+    return <RouteSplash label={copy.loading} />;
   }
 
   return (

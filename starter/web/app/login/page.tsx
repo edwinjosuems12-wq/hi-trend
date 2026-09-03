@@ -9,6 +9,7 @@ import { Logo } from "@/components/brand/logo";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { PasswordField } from "@/components/auth/password-field";
 import { PublicAuthRoute } from "@/components/auth/public-auth-route";
+import { RouteSplash } from "@/components/auth/route-splash";
 import { api, ApiError } from "@/lib/api";
 import { resolveNextPath, routes } from "@/lib/routes";
 import { surfaceCopy, useInterfaceLocale } from "@/lib/i18n";
@@ -199,14 +200,8 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <PublicAuthRoute>
-      <Suspense
-        fallback={
-          <main className="route-status">
-            {surfaceCopy.es.auth.loginLoading}
-          </main>
-        }
-      >
+    <PublicAuthRoute onPendingSignup="notice">
+      <Suspense fallback={<RouteSplash label={surfaceCopy.es.auth.loginLoading} />}>
         <LoginForm />
       </Suspense>
     </PublicAuthRoute>

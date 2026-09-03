@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 
 import { Logo } from "@/components/brand/logo";
 import { PublicAuthRoute } from "@/components/auth/public-auth-route";
+import { RouteSplash } from "@/components/auth/route-splash";
 import { api, ApiError } from "@/lib/api";
 import { routes } from "@/lib/routes";
 
@@ -103,8 +104,8 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <PublicAuthRoute>
-      <Suspense fallback={<main className="route-status">Preparando recuperación…</main>}>
+    <PublicAuthRoute onPendingSignup="notice">
+      <Suspense fallback={<RouteSplash label="Preparando recuperación…" />}>
         <ResetPasswordForm />
       </Suspense>
     </PublicAuthRoute>

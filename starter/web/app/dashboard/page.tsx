@@ -8,8 +8,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/shell/app-shell";
 import { ProjectFolderCard, NewProjectFolderCard } from "@/components/projects/project-folder-card";
 import { TemplateLibrary } from "@/components/templates/template-library";
+import { TemplateCarousel } from "@/components/templates/template-carousel";
 import { api, ApiError } from "@/lib/api";
 import { routes } from "@/lib/routes";
+import { toTemplatePresentation } from "@/lib/template-catalog";
+import {
+  loadRecommendedTemplates,
+  readBusinessTargeting,
+  type RecommendedTemplate,
+} from "@/lib/template-recommendations";
 import type { Template } from "@/types/template";
 import {
   appCopy,
@@ -34,15 +41,30 @@ function dateLabel(value: string | null, locale: AppLocale, empty: string) {
   return formatDate(locale, value) || empty;
 }
 
+/**
+ * The three covers the hero shows before the catalogue answers.
+ *
+ * They are the shipped artwork, not placeholders: the rail is decorative, and
+ * a hero that starts empty and fills in later moves the whole page under the
+ * reader. Once the catalogue arrives the real templates take their place.
+ */
+const HERO_FALLBACK_COVERS = [
+  "/templates/flores.png",
+  "/templates/coffee.png",
+  "/templates/amor.png",
+];
+
 export default function DashboardPage() {
   const router = useRouter();
   const [status, setStatus] = useState<"active" | "archived">("active");
   const [view, setView] = useState<"projects" | "templates">("projects");
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [recommended, setRecommended] = useState<RecommendedTemplate[]>([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [startingId, setStartingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [locale, setLocale] = useState<AppLocale>(readStoredLocale);
   const copy = appCopy[locale];
@@ -76,6 +98,69 @@ export default function DashboardPage() {
       .catch(() => undefined);
   }, []);
 
+  // The recommender reads the business profile, so it can only run once the
+  // catalogue is in: that catalogue is also the fallback when the workspace has
+  // no platform or objective set yet, or when the recommendation call fails.
+  useEffect(() => {
+    if (!templates.length) return;
+    let active = true;
+
+    async function loadRecommendations() {
+      let targeting = {
+        platform: null as string | null,
+        objective: null as string | null,
+      };
+      try {
+        const businesses = await api.businesses.list();
+        targeting = readBusinessTargeting(businesses[0]);
+      } catch {
+        // No profile reachable: the catalogue fallback still fills the rail.
+      }
+
+      const items = await loadRecommendedTemplates({
+        platform: targeting.platform,
+        objective: targeting.objective,
+        // Six is the ceiling the recommendations endpoint accepts; asking for
+        // more is a 422, which would silently demote every visitor to the
+        // plain catalogue.
+        limit: 6,
+        fallback: templates,
+      });
+      if (active) setRecommended(items);
+    }
+
+    void loadRecommendations();
+    return () => {
+      active = false;
+    };
+  }, [templates]);
+
+  const heroCovers = useMemo(() => {
+    const covers = templates
+      .slice(0, 3)
+      .map((template) => toTemplatePresentation(template).thumbnail_url);
+    return covers.length === 3 ? covers : HERO_FALLBACK_COVERS;
+  }, [templates]);
+
+  const carouselItems = useMemo(() => {
+    const whyPrefix = surfaceCopy[locale].templates.whyPrefix;
+    return recommended.map((template) => {
+      const presentation = toTemplatePresentation(template);
+      return {
+        id: presentation.id,
+        title: presentation.title,
+        thumbnailUrl: presentation.thumbnail_url,
+        aspectRatio: presentation.aspectRatio,
+        badge: presentation.displayCategory,
+        // Only the recommender explains itself; catalogue fallbacks carry no
+        // rationale and must not be dressed up as if they did.
+        reason: template.rationale
+          ? `${whyPrefix}: ${template.rationale}`
+          : undefined,
+      };
+    });
+  }, [locale, recommended]);
+
   const filteredProjects = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("es");
     return normalized
@@ -107,6 +192,11 @@ export default function DashboardPage() {
 
   async function useTemplate(template: Template) {
     router.push(`/studio/new?template=${encodeURIComponent(template.id)}`);
+  }
+
+  function startTemplate(templateId: string) {
+    setStartingId(templateId);
+    router.push(`/studio/new?template=${encodeURIComponent(templateId)}`);
   }
 
   return (
@@ -143,9 +233,9 @@ export default function DashboardPage() {
         </header>
         <section className="dashboard-hero">
           <div className="dashboard-hero-rail" aria-hidden="true">
-            <Image src="/templates/flores.png" alt="" width={92} height={122} />
-            <Image src="/templates/coffee.png" alt="" width={92} height={122} />
-            <Image src="/templates/amor.png" alt="" width={92} height={122} />
+            {heroCovers.map((cover) => (
+              <Image key={cover} src={cover} alt="" width={92} height={122} />
+            ))}
           </div>
           <p className="eyebrow">{copy.dashboard.startEyebrow}</p>
           <h2>
@@ -253,11 +343,15 @@ export default function DashboardPage() {
                 <h2>{copy.dashboard.recommended}</h2>
                 <Link href={routes.templates}>{copy.dashboard.seeAll}</Link>
               </div>
-              <TemplateLibrary
-                templates={templates.slice(0, 4)}
-                onUse={useTemplate}
-                compact
-                copy={surfaceCopy[locale].templates}
+              <TemplateCarousel
+                items={carouselItems}
+                label={surfaceCopy[locale].templates.carousel}
+                useLabel={surfaceCopy[locale].templates.use}
+                busyLabel={surfaceCopy[locale].templates.preparing}
+                previousLabel={surfaceCopy[locale].templates.previous}
+                nextLabel={surfaceCopy[locale].templates.next}
+                onSelect={startTemplate}
+                busyId={startingId}
               />
             </section>
           </>
