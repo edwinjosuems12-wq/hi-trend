@@ -137,7 +137,8 @@ a {
 /* An unfinished registration is announced, never enforced: the sign-in form
    stays reachable underneath, so the pill floats instead of taking a row of
    the layout it does not own. */
-.route-resume {
+.route-resume,
+.route-notice {
   position: fixed;
   z-index: 40;
   top: 1rem;
@@ -162,8 +163,27 @@ a {
 .route-resume a:hover {
   text-decoration: underline;
 }
+/* The same pill in a warning tone, for when the session check never got an
+   answer. The form underneath stays usable on purpose, so this reports the
+   outage without becoming a dead end. */
+.route-notice {
+  border-color: var(--warning);
+}
+.route-notice button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.route-notice button:hover {
+  text-decoration: underline;
+}
 @media (max-width: 480px) {
-  .route-resume {
+  .route-resume,
+  .route-notice {
     width: calc(100% - 2rem);
     justify-content: center;
   }

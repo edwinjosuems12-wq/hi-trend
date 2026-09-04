@@ -1,14 +1,17 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { PublicAuthRoute } from "@/components/auth/public-auth-route";
 import { ApiError } from "@/lib/api";
 
 const replace = vi.fn();
+// Stable across renders, like the real App Router hook: a fresh object each
+// render would re-fire every effect that depends on it.
+const router = { replace, refresh: vi.fn() };
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/login",
-  useRouter: () => ({ replace, refresh: vi.fn() }),
+  useRouter: () => router,
 }));
 
 const me = vi.fn();
@@ -51,6 +54,63 @@ describe("PublicAuthRoute", () => {
 
     expect(await screen.findByText("Formulario")).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  test("reports an unreachable API instead of failing open in silence", async () => {
+    me.mockRejectedValue(
+      new ApiError(500, "INTERNAL", "Error del servidor.", true)
+    );
+
+    render(
+      <PublicAuthRoute>
+        <p>Formulario</p>
+      </PublicAuthRoute>
+    );
+
+    // The form stays usable on purpose; the warning sits alongside it.
+    expect(await screen.findByText("Formulario")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "No pudimos contactar con el servidor."
+    );
+  });
+
+  test("clears the warning when a retry reaches the API", async () => {
+    me.mockRejectedValueOnce(
+      new ApiError(500, "INTERNAL", "Error del servidor.", true)
+    ).mockRejectedValue(unauthenticated());
+    getSignup.mockRejectedValue(
+      new ApiError(404, "SIGNUP_NOT_FOUND", "No hay registro.", false)
+    );
+
+    render(
+      <PublicAuthRoute onPendingSignup="notice">
+        <p>Formulario</p>
+      </PublicAuthRoute>
+    );
+
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+    );
+    expect(screen.getByText("Formulario")).toBeInTheDocument();
+  });
+
+  test("does not warn when the API answers with a clean 401", async () => {
+    me.mockRejectedValue(unauthenticated());
+    getSignup.mockRejectedValue(
+      new ApiError(404, "SIGNUP_NOT_FOUND", "No hay registro.", false)
+    );
+
+    render(
+      <PublicAuthRoute onPendingSignup="notice">
+        <p>Formulario</p>
+      </PublicAuthRoute>
+    );
+
+    expect(await screen.findByText("Formulario")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   test("offers an unfinished registration without taking over the page", async () => {

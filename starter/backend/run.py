@@ -12,7 +12,7 @@ if __name__ == "__main__":
     config = uvicorn.Config(
         "app.main:app",
         host="127.0.0.1",
-        port=8001,
+        port=8000,
         loop="asyncio",
     )
 

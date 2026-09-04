@@ -35,6 +35,8 @@ export function PublicAuthRoute({
   const pathname = usePathname();
   const [state, setState] = useState<RouteState>("checking");
   const [resumeSignup, setResumeSignup] = useState(false);
+  const [unreachable, setUnreachable] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -50,9 +52,17 @@ export function PublicAuthRoute({
         // the useful answer is the form, not a dead end the visitor cannot
         // leave. Only a clean 401 is knowledge; anything else is ignorance.
         if (!isExpectedUnauthenticated(error)) {
-          if (active) setState("ready");
+          // Failing open must not mean failing silently. Without this the
+          // page is indistinguishable from a healthy one, so a dead API
+          // reads as a rejected password and the visitor retypes forever.
+          if (active) {
+            setUnreachable(true);
+            setState("ready");
+          }
           return;
         }
+        // A clean 401 proves the API answered, so any earlier warning is stale.
+        if (active) setUnreachable(false);
       }
 
       try {
@@ -76,7 +86,7 @@ export function PublicAuthRoute({
     return () => {
       active = false;
     };
-  }, [onPendingSignup, pathname, router]);
+  }, [attempt, onPendingSignup, pathname, router]);
 
   if (state === "checking") {
     return <RouteSplash />;
@@ -84,6 +94,14 @@ export function PublicAuthRoute({
 
   return (
     <>
+      {unreachable ? (
+        <div className="route-notice" role="alert">
+          <span>No pudimos contactar con el servidor.</span>
+          <button type="button" onClick={() => setAttempt((n) => n + 1)}>
+            Reintentar
+          </button>
+        </div>
+      ) : null}
       {resumeSignup ? (
         <div className="route-resume" role="status">
           <span>Tienes un registro sin terminar.</span>
