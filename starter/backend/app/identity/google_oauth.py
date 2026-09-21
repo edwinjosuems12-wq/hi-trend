@@ -69,13 +69,16 @@ class GoogleOIDCClient:
         except httpx.HTTPError as exc:
             raise GoogleOIDCError("GOOGLE_OAUTH_UNAVAILABLE") from exc
         if response.status_code >= 400:
+            print(f"[GOOGLE_OAUTH] exchange_code error {response.status_code}: {response.text}", flush=True)
             raise GoogleOIDCError("GOOGLE_OAUTH_CODE_INVALID")
         try:
             payload = response.json()
         except ValueError as exc:
+            print(f"[GOOGLE_OAUTH] exchange_code invalid json: {exc}", flush=True)
             raise GoogleOIDCError("GOOGLE_OAUTH_INVALID_RESPONSE") from exc
         id_token = payload.get("id_token") if isinstance(payload, dict) else None
         if not isinstance(id_token, str) or not id_token:
+            print(f"[GOOGLE_OAUTH] exchange_code missing id_token in payload: {payload}", flush=True)
             raise GoogleOIDCError("GOOGLE_OAUTH_INVALID_RESPONSE")
         return id_token
 
@@ -99,13 +102,16 @@ class GoogleOIDCClient:
         try:
             header = jwt.get_unverified_header(id_token)
         except InvalidTokenError as exc:
+            print(f"[GOOGLE_OAUTH] validate_id_token header error: {exc}", flush=True)
             raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID") from exc
         kid = header.get("kid")
         if header.get("alg") != "RS256" or not isinstance(kid, str):
+            print(f"[GOOGLE_OAUTH] validate_id_token invalid alg/kid: alg={header.get('alg')} kid={kid}", flush=True)
             raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID")
         jwks = await self.fetch_jwks()
         jwk = next((key for key in jwks["keys"] if key.get("kid") == kid), None)
         if not isinstance(jwk, dict):
+            print(f"[GOOGLE_OAUTH] validate_id_token jwk not found for kid: {kid}", flush=True)
             raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID")
         try:
             signing_key = jwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(jwk))
@@ -116,17 +122,22 @@ class GoogleOIDCClient:
                 audience=self._config.google_client_id,
                 issuer=list(GOOGLE_ISSUERS),
                 options={"require": ["exp", "iat", "iss", "aud", "sub", "email", "nonce"]},
+                leeway=30,
             )
         except InvalidTokenError as exc:
+            print(f"[GOOGLE_OAUTH] validate_id_token InvalidTokenError: {exc}", flush=True)
             raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID") from exc
         if claims.get("nonce") != nonce:
+            print(f"[GOOGLE_OAUTH] validate_id_token nonce mismatch: claims={claims.get('nonce')} expected={nonce}", flush=True)
             raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID")
         subject = claims.get("sub")
         email = claims.get("email")
         email_verified = claims.get("email_verified")
         if not isinstance(subject, str) or not subject or not isinstance(email, str) or not email:
+            print(f"[GOOGLE_OAUTH] validate_id_token missing subject or email", flush=True)
             raise GoogleOIDCError("GOOGLE_OAUTH_TOKEN_INVALID")
         if email_verified is not True and email_verified != "true":
+            print(f"[GOOGLE_OAUTH] validate_id_token email_verified is not True: {email_verified}", flush=True)
             raise GoogleOIDCError("GOOGLE_OAUTH_EMAIL_UNVERIFIED")
         name = claims.get("name")
         return GoogleIdentity(

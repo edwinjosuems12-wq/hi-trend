@@ -188,11 +188,14 @@ export function Markdown({ children }: { children: string }) {
       continue;
     }
 
-    // A plain line continuing a list item wraps into it rather than starting a
-    // paragraph in the middle of the list.
+    // A line continuing a list item wraps into it only if indented,
+    // otherwise the list ends and regular paragraphs begin.
     if (list.length > 0) {
-      list[list.length - 1] += ` ${line.trim()}`;
-      continue;
+      if (/^\s{2,}|\t/.test(line)) {
+        list[list.length - 1] += ` ${line.trim()}`;
+        continue;
+      }
+      flushList();
     }
     flushQuote();
     paragraph.push(line.trim());

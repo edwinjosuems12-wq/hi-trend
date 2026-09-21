@@ -202,7 +202,7 @@ export function GeneratedArtifactCard({
           </p>
         ) : null}
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", marginTop: "0.5rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "0.5rem", marginTop: "0.5rem" }}>
           <div style={{ padding: "0.6rem", background: "rgba(0,0,0,0.3)", borderRadius: "6px", border: "1px solid rgba(255,255,255,0.06)" }}>
             <span style={{ fontSize: "0.7rem", color: "#a1a1aa", textTransform: "uppercase", fontWeight: 600 }}>Titular para Canva</span>
             <p style={{ margin: "0.2rem 0 0", fontSize: "0.8rem", fontWeight: 600, color: "#ffffff" }}>«{artifact.hook}»</p>

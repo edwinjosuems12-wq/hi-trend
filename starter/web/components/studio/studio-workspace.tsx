@@ -279,10 +279,22 @@ export function StudioWorkspace({
    * is parked in session storage and the new conversation replays it as its
    * first message once the thread is ready.
    */
-  function startConversationWith(text: string) {
-    saveFirstPrompt(text);
+  function startConversationWith(
+    text: string,
+    intent: GenerationIntent = "create_social_post",
+    attachmentIds: string[] = []
+  ) {
+    saveFirstPrompt({ text, intent, attachmentIds });
     setFirstPrompt(text);
     void createConversation();
+  }
+
+  function startFromComposer(text: string, attachmentIds: string[] = []) {
+    startConversationWith(
+      text,
+      attachmentIds.length ? "analyze_visual" : "create_social_post",
+      attachmentIds
+    );
   }
 
   async function updateConversation(item: ConversationItem) {
@@ -315,7 +327,7 @@ export function StudioWorkspace({
   ) {
     if (generationInFlightRef.current) return;
     if (!conversationId) {
-      startConversationWith(text);
+      startConversationWith(text, intent, attachmentIds);
       return;
     }
     const operation = continuation || {
@@ -441,10 +453,14 @@ export function StudioWorkspace({
 
   useEffect(() => {
     if (!conversationId || !threadReady || firstPromptSentRef.current) return;
-    const prompt = takeFirstPrompt();
-    if (prompt) {
+    const promptPayload = takeFirstPrompt();
+    if (promptPayload && promptPayload.text) {
       firstPromptSentRef.current = true;
-      void send(prompt);
+      void send(
+        promptPayload.text,
+        promptPayload.intent || "create_social_post",
+        promptPayload.attachmentIds || []
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, threadReady]);
@@ -958,7 +974,7 @@ export function StudioWorkspace({
                 ))}
               </div>
               <Composer
-                onSend={startConversationWith}
+                onSend={startFromComposer}
                 disabled={creating}
                 draftKey="nueva-conversacion"
                 placeholder="Escribe tu idea o pregunta…"

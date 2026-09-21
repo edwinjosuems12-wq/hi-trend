@@ -407,9 +407,12 @@ class Settings:
             .strip()
             .lower()
         )
-        self.object_storage_local_dir: str = values.get(
-            "OBJECT_STORAGE_LOCAL_DIR", "./storage"
-        ).strip()
+        storage_dir = values.get("OBJECT_STORAGE_LOCAL_DIR", "./storage").strip()
+        storage_path = Path(storage_dir)
+        if not storage_path.is_absolute():
+            backend_dir = Path(__file__).resolve().parent.parent.parent
+            storage_path = (backend_dir / storage_dir).resolve()
+        self.object_storage_local_dir: str = str(storage_path)
         self.supabase_url: str = values.get("SUPABASE_URL", "").strip().rstrip("/")
         self.supabase_service_role_key: str = values.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
         self.supabase_storage_bucket: str = values.get(

@@ -527,6 +527,7 @@ async def google_callback(
             id_token=id_token, nonce=authorization_request.nonce
         )
     except GoogleOIDCError as exc:
+        print(f"[GOOGLE_OAUTH] callback exception: code={exc.code}", flush=True)
         outcome = "unavailable" if exc.code == "GOOGLE_OAUTH_UNAVAILABLE" else "failed"
         return _google_callback_error(outcome)
 

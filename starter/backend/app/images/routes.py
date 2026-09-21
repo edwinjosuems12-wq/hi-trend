@@ -26,9 +26,10 @@ from app.conversations.idempotency import (
     recover_failed,
     reserve,
 )
+from app.business.models import Business
 from app.conversations.repository import SqlBusinessContextRepository
 from app.core.capabilities import Capability, get_runtime_capability_registry
-from app.core.errors import AppError
+from app.core.errors import AppError, NotFoundError
 from app.dependencies import get_db, require_workspace
 from app.images import budget as budget_ledger
 from app.images import service as image_service
@@ -135,6 +136,16 @@ async def draft_image_brief(
     itself the documented fallback, so the user always leaves with something
     they can hand to a designer.
     """
+
+    if body.business_id:
+        biz_exists = await db.scalar(
+            select(Business.id).where(
+                Business.id == body.business_id,
+                Business.workspace_id == workspace_id,
+            )
+        )
+        if not biz_exists:
+            raise NotFoundError("Negocio")
 
     context = await SqlBusinessContextRepository(db).get_for_generation(
         workspace_id=workspace_id, business_id=body.business_id

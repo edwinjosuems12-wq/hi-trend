@@ -255,12 +255,18 @@ export default function LibraryPage() {
                 flexWrap: "wrap",
               }}
             >
-              <div
+              <a
+                href={api.assets.contentUrl(asset.id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Abrir ${asset.original_name} en pestaña nueva`}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 12,
                   minWidth: 0,
+                  textDecoration: "none",
+                  color: "inherit",
                 }}
               >
                 <Image
@@ -276,6 +282,7 @@ export default function LibraryPage() {
                     flexShrink: 0,
                     borderRadius: "var(--radius-sm)",
                     background: "var(--muted)",
+                    cursor: "pointer",
                   }}
                 />
                 <div style={{ minWidth: 0 }}>
@@ -303,24 +310,47 @@ export default function LibraryPage() {
                       : ""}
                   </span>
                 </div>
+              </a>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <a
+                  href={api.assets.contentUrl(asset.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    padding: "6px 14px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--surface)",
+                    fontWeight: 600,
+                    fontSize: "0.85rem",
+                    textDecoration: "none",
+                    color: "var(--foreground)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  Abrir ↗
+                </a>
+                <button
+                  type="button"
+                  onClick={() => handleAnalyze(asset.id)}
+                  disabled={analyzing === asset.id}
+                  style={{
+                    padding: "6px 14px",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    background: "var(--surface)",
+                    color: "var(--foreground)",
+                    cursor: analyzing === asset.id ? "not-allowed" : "pointer",
+                    fontWeight: 600,
+                    fontSize: "0.85rem",
+                    opacity: analyzing === asset.id ? 0.6 : 1,
+                  }}
+                >
+                  {analyzing === asset.id ? "Analizando..." : "Analizar"}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => handleAnalyze(asset.id)}
-                disabled={analyzing === asset.id}
-                style={{
-                  padding: "6px 14px",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-sm)",
-                  background: "var(--surface)",
-                  cursor: analyzing === asset.id ? "not-allowed" : "pointer",
-                  fontWeight: 600,
-                  fontSize: "0.85rem",
-                  opacity: analyzing === asset.id ? 0.6 : 1,
-                }}
-              >
-                {analyzing === asset.id ? "Analizando..." : "Analizar"}
-              </button>
             </div>
           ))}
         </div>

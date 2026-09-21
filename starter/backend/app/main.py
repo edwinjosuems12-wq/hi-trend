@@ -3,8 +3,11 @@ from __future__ import annotations
 import sys
 if sys.platform == "win32":
     import asyncio
+    import selectors
     try:
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        loop = asyncio.SelectorEventLoop(selectors.SelectSelector())
+        asyncio.set_event_loop(loop)
     except Exception:
         pass
 
@@ -400,12 +403,13 @@ async def ready() -> dict[str, object] | JSONResponse:
         factory = get_session_factory()
         async with factory() as session:
             await session.execute(text("SELECT 1"))
-    except Exception:
+    except Exception as exc:
+        logger.exception("database_health_check_failed: %s", exc)
         return JSONResponse(
             status_code=503,
             content={
                 "status": "not_ready",
-                "checks": {"database": "unavailable"},
+                "checks": {"database": "unavailable", "detail": str(exc)},
             },
         )
     capabilities = await get_infrastructure_capabilities()

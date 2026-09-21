@@ -44,13 +44,24 @@ export function MessageList({
   onFeedback,
   onCopy,
 }: Props) {
+  const logRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    bottomRef.current?.scrollIntoView({
-      behavior: reducedMotion ? "auto" : "smooth",
-    });
+    const container = logRef.current;
+    if (container && typeof container.scrollTo === "function") {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: reducedMotion ? "auto" : "smooth",
+      });
+    } else if (bottomRef.current && typeof bottomRef.current.scrollIntoView === "function") {
+      bottomRef.current.scrollIntoView({
+        behavior: reducedMotion ? "auto" : "smooth",
+      });
+    } else if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [messages]);
 
   if (messages.length === 0 && !loading) {
@@ -67,6 +78,7 @@ export function MessageList({
 
   return (
     <div
+      ref={logRef}
       role="log"
       aria-label="Conversación"
       aria-live="polite"

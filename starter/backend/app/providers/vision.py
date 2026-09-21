@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import re
 import urllib.parse
 from collections.abc import Sequence
@@ -9,6 +10,8 @@ from typing import Protocol
 import httpx
 
 from app.core.errors import AppError
+
+logger = logging.getLogger(__name__)
 
 # --------------------------------------------------------------------------- #
 # Canva search
@@ -221,19 +224,19 @@ class DemoVisionReviewProvider:
             {
                 "title": f"Post promocional para {category}",
                 "canva_url": canva_search_url(plan["promo"]),
-                "thumbnail_url": "/templates/flores.png",
+                "thumbnail_url": "",
                 "reason": f"Estructura equilibrada para anunciar {product} con la oferta visible.",
             },
             {
                 "title": "Producto destacado con foto grande",
                 "canva_url": canva_search_url(plan["product"]),
-                "thumbnail_url": "/templates/coffee.png",
+                "thumbnail_url": "",
                 "reason": "Deja la fotografía como protagonista y el titular limpio encima.",
             },
             {
                 "title": f"Identidad de marca de {biz_name}",
                 "canva_url": canva_search_url(plan["brand"]),
-                "thumbnail_url": "/templates/menu.png",
+                "thumbnail_url": "",
                 "reason": f"Formatos sobrios para consolidar la imagen frente a {audience}.",
             },
         ]
@@ -315,7 +318,7 @@ class OpenAICompatibleVisionReviewProvider:
                 "4. En 'canva_query_suggestions' añade 3 búsquedas alternativas cortas por si el usuario quiere otro estilo. "
                 "5. Proporciona en 'canva_slots_guide' los textos clave para pegar en Canva (headline, body, cta). "
                 "Devuelve ÚNICAMENTE un JSON válido con las claves: "
-                "summary, strengths (lista), improvements (lista con priority, area, reason, action), "
+                "summary, strengths (lista), improvements (lista de objetos con priority: 'high'|'medium'|'low', area: 'message'|'hierarchy'|'readability'|'brand'|'cta'|'platform'|'accessibility', reason, action), "
                 "ai_hallmarks (lista de 2-4 aspectos de IA o diseño detectados), "
                 "canva_templates (lista de objetos con: title, canva_query, reason), "
                 "canva_query_suggestions (lista de 3 strings cortos), "
@@ -360,7 +363,8 @@ class OpenAICompatibleVisionReviewProvider:
                 content = content[start : end + 1]
             parsed = json.loads(content)
             return self._resolve_canva_links(parsed, request)
-        except Exception:
+        except Exception as exc:
+            logger.exception("OpenAICompatibleVisionReviewProvider failed; falling back to DemoVisionReviewProvider: %s", exc)
             return await DemoVisionReviewProvider().analyze(request=request)
 
     @staticmethod
@@ -373,6 +377,36 @@ class OpenAICompatibleVisionReviewProvider:
         """
         plan = build_canva_search_plan(request)
         fallbacks = [plan["promo"], plan["product"], plan["brand"]]
+
+        # Normalize improvements to match schema literals
+        priority_map = {
+            "alta": "high", "alto": "high", "high": "high",
+            "media": "medium", "medio": "medium", "medium": "medium",
+            "baja": "low", "bajo": "low", "low": "low",
+        }
+        area_map = {
+            "message": "message", "mensaje": "message", "copy": "message", "texto": "message",
+            "hierarchy": "hierarchy", "jerarquia": "hierarchy", "jerarquía": "hierarchy", "estructura": "hierarchy",
+            "readability": "readability", "legibilidad": "readability", "contraste": "readability", "tipografia": "readability", "tipografía": "readability",
+            "brand": "brand", "marca": "brand", "identidad": "brand", "colores": "brand",
+            "cta": "cta", "llamado": "cta", "llamada": "cta",
+            "platform": "platform", "plataforma": "platform", "formato": "platform",
+            "accessibility": "accessibility", "accesibilidad": "accessibility",
+        }
+        improvements = parsed.get("improvements")
+        if isinstance(improvements, list):
+            clean_improvements = []
+            for item in improvements:
+                if not isinstance(item, dict):
+                    continue
+                p = str(item.get("priority", "")).lower().strip()
+                item["priority"] = priority_map.get(p, "medium")
+                a = str(item.get("area", "")).lower().strip()
+                item["area"] = area_map.get(a, "readability")
+                item["reason"] = str(item.get("reason", ""))[:300]
+                item["action"] = str(item.get("action", ""))[:300]
+                clean_improvements.append(item)
+            parsed["improvements"] = clean_improvements
 
         templates = parsed.get("canva_templates")
         if isinstance(templates, list):
@@ -389,6 +423,10 @@ class OpenAICompatibleVisionReviewProvider:
                     template["canva_url"] = normalize_canva_url(
                         template.get("canva_url"), fallback
                     )
+                # Never keep local/mock template paths; only accept real external URLs
+                thumb = str(template.get("thumbnail_url", "")).strip()
+                if thumb.startswith("/templates/") or not (thumb.startswith("http://") or thumb.startswith("https://")):
+                    template["thumbnail_url"] = ""
 
         suggestions = parsed.get("canva_query_suggestions")
         if not isinstance(suggestions, list) or not suggestions:

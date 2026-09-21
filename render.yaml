@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: hitrendy-api
+    runtime: python
+    rootDir: starter/backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: APP_ENV
+        value: development
+      - key: STORAGE_PROVIDER
+        value: local
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hitrendy-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CSRF_ENABLED
+        value: "1"
+      - key: AI_PROVIDER
+        value: openai-compatible
+      - key: AI_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: AI_MODEL
+        value: openai/gpt-oss-20b
+      - key: AI_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+
+databases:
+  - name: hitrendy-db
+    databaseName: hitrendy
+    user: hitrendy
+    plan: free

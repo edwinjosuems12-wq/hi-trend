@@ -73,7 +73,12 @@ def main() -> None:
     parser.add_argument("--interval", type=float, default=DEFAULT_INTERVAL_SECONDS)
     parser.add_argument("--batch", type=int, default=DEFAULT_BATCH)
     parser.add_argument("--once", action="store_true", help="Procesa un ciclo y termina")
-    raise SystemExit(asyncio.run(_main(parser.parse_args())))
+    args = parser.parse_args()
+    import sys
+    if sys.platform == "win32":
+        import selectors
+        raise SystemExit(asyncio.run(_main(args), loop_factory=lambda: asyncio.SelectorEventLoop(selectors.SelectSelector())))
+    raise SystemExit(asyncio.run(_main(args)))
 
 
 if __name__ == "__main__":

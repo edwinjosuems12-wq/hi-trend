@@ -1316,7 +1316,7 @@ a {
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-  overflow: hidden;
+  overflow: clip;
 }
 /* Spans both columns so the wordmark sits above the rail, as in the reference. */
 .studio-header {
@@ -1462,7 +1462,7 @@ a {
 
 /* -- Message log ----------------------------------------------------------- */
 .message-log {
-  flex: 1;
+  flex: 1 1 0%;
   min-height: 0;
   overflow-y: auto;
   padding: 1.5rem clamp(1rem, 3vw, 2.5rem);
@@ -1486,14 +1486,11 @@ a {
 }
 .message-bubble {
   min-width: 0;
-  max-width: min(80%, 43rem);
-  /* Rich answers inside lay themselves out against the bubble, not the
-     viewport: the same card is one column beside an open history dropdown and
-     two when the chat has the canvas to itself. */
-  container-type: inline-size;
 }
 /* A user message is always plain text, so the bubble itself is the surface. */
 .message-bubble--user {
+  width: fit-content;
+  max-width: min(85%, 38rem);
   padding: 0.75rem 1rem;
   color: var(--chat-bubble-user-foreground);
   background: var(--chat-bubble-user);
@@ -1501,10 +1498,19 @@ a {
     var(--radius-lg);
   box-shadow: var(--shadow-chat-bubble);
 }
+/* An assistant turn spans the message measure so its rich cards and text
+   lay out cleanly. inline-size container query works because width is definite. */
+.message-bubble--assistant {
+  width: 100%;
+  max-width: 100%;
+  container-type: inline-size;
+}
 /* An assistant message can instead be a generated artifact, which brings its
    own card. Painting the bubble too would nest one card inside another, so the
    surface goes on the text node and the card is left to speak for itself. */
 .message-bubble--assistant > .message-text {
+  width: fit-content;
+  max-width: min(100%, 48rem);
   padding: 0.75rem 1rem;
   color: var(--chat-bubble-assistant-foreground);
   background: var(--chat-bubble-assistant);
@@ -1515,7 +1521,8 @@ a {
 }
 .message-text {
   margin: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
   white-space: pre-wrap;
   line-height: 1.55;
 }
@@ -1986,9 +1993,124 @@ a {
   font-style: normal;
   font-weight: 700;
 }
+.review-templates-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.review-templates-title-group h4 {
+  margin: 0;
+}
+.canva-online-indicator {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--ht-success-on-dark);
+  background: color-mix(in srgb, var(--ht-success-on-dark) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ht-success-on-dark) 28%, transparent);
+  border-radius: var(--radius-pill);
+  padding: 0.12rem 0.5rem;
+}
+.canva-template-thumb {
+  position: relative;
+  width: 100%;
+}
+.canva-mockup-visual {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.65rem;
+  background: linear-gradient(145deg, var(--ht-navy) 0%, var(--ht-canvas-mid) 100%);
+  color: var(--ht-white);
+  user-select: none;
+}
+.canva-mockup-visual[data-variant="1"] {
+  background: linear-gradient(145deg, var(--ht-indigo-deep) 0%, var(--ht-violet-mid) 100%);
+}
+.canva-mockup-visual[data-variant="2"] {
+  background: linear-gradient(145deg, var(--ht-indigo-abyss) 0%, var(--ht-canvas-high) 100%);
+}
+.canva-mockup-badge-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+.canva-brand-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #00c4cc;
+  background: rgba(0, 196, 204, 0.12);
+  border: 1px solid rgba(0, 196, 204, 0.25);
+  border-radius: var(--radius-pill);
+  padding: 0.12rem 0.45rem;
+}
+.canva-format-tag {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--chat-foreground-muted);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-pill);
+  padding: 0.12rem 0.4rem;
+}
+.canva-mockup-canvas {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  margin: auto 0;
+  text-align: center;
+}
+.canva-mockup-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+.canva-mockup-wireframe {
+  width: 80%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+.canva-wire-line {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.2);
+}
+.canva-wire-title {
+  width: 75%;
+}
+.canva-wire-subtitle {
+  width: 50%;
+  opacity: 0.6;
+}
+.canva-wire-pill {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--ht-purple-mist);
+  margin-top: 0.15rem;
+}
+.canva-mockup-bottom {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--ht-purple-light);
+  text-align: center;
+  opacity: 0.9;
+}
+.canva-template-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
 
 /* -- Composer dock --------------------------------------------------------- */
 .studio-composer-dock {
+  flex-shrink: 0;
   display: grid;
   gap: 0.6rem;
   /* Capped and centred: the shell can be 1900px wide and a composer that wide
@@ -2391,7 +2513,7 @@ a {
   .studio-status {
     font-size: 0.7rem;
   }
-  .message-bubble {
+  .message-bubble--user {
     max-width: 92%;
   }
   .studio-quick-grid {
@@ -2408,6 +2530,8 @@ a {
 }
 
 .artifact-card {
+  width: 100%;
+  box-sizing: border-box;
   color: var(--card-foreground);
   background: var(--card);
   border: 1px solid var(--border);
@@ -2431,6 +2555,7 @@ a {
   background: var(--primary);
   border: 0;
   border-radius: var(--radius-sm);
+  white-space: nowrap;
 }
 
 @keyframes placeholder-shimmer {

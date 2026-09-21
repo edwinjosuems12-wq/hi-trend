@@ -10,7 +10,10 @@ from app.core.config import settings
 
 
 def _alembic_config() -> Config:
-    return Config(str(Path(__file__).parents[1] / "alembic.ini"))
+    backend_dir = Path(__file__).parents[1]
+    config = Config(str(backend_dir / "alembic.ini"))
+    config.set_main_option("script_location", str(backend_dir / "alembic"))
+    return config
 
 
 def test_demo_sqlite_reaches_head_and_reapplies_wave14(tmp_path: Path) -> None:

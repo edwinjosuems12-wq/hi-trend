@@ -48,3 +48,7 @@ test_*.db
 .DS_Store
 .vscode/
 .idea/
+firebase-debug.log
+firebase-debug.*.log
+hi-trend/
+

@@ -59,6 +59,86 @@ function canvaSearchUrl(query: string) {
   return `${CANVA_SEARCH}?query=${encodeURIComponent(query.trim())}`;
 }
 
+function CanvaTemplateCard({
+  template,
+  index,
+}: {
+  template: CanvaTemplateRec;
+  index: number;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const isLocalMock = !template.thumbnail_url || template.thumbnail_url.startsWith("/templates/");
+  const showMockup = isLocalMock || imgError;
+
+  const titleLower = (template.title || "").toLowerCase();
+  const isPromo =
+    titleLower.includes("promo") ||
+    titleLower.includes("oferta") ||
+    titleLower.includes("descuento") ||
+    titleLower.includes("ventas");
+  const isProduct =
+    titleLower.includes("producto") ||
+    titleLower.includes("foto") ||
+    titleLower.includes("destacad") ||
+    titleLower.includes("plato");
+
+  const icon = isPromo ? "🏷️" : isProduct ? "📸" : "✨";
+  const badgeLabel = isPromo ? "Promocional" : isProduct ? "Producto" : "Marca";
+
+  return (
+    <a
+      className="review-template canva-template-card"
+      href={template.canva_url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`Abrir ${template.title} en Canva`}
+    >
+      <span className="review-template-thumb canva-template-thumb">
+        {!showMockup && template.thumbnail_url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={template.thumbnail_url}
+            alt={template.title}
+            loading="lazy"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="canva-mockup-visual" data-variant={index % 3}>
+            <div className="canva-mockup-badge-bar">
+              <span className="canva-brand-tag">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.8 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+                </svg>
+                Canva
+              </span>
+              <span className="canva-format-tag">{badgeLabel}</span>
+            </div>
+            <div className="canva-mockup-canvas">
+              <span className="canva-mockup-icon">{icon}</span>
+              <div className="canva-mockup-wireframe">
+                <div className="canva-wire-line canva-wire-title" />
+                <div className="canva-wire-line canva-wire-subtitle" />
+                <div className="canva-wire-pill">
+                  <span>Plantilla en línea</span>
+                </div>
+              </div>
+            </div>
+            <div className="canva-mockup-bottom">
+              <span>Abrir en Canva ↗</span>
+            </div>
+          </div>
+        )}
+      </span>
+      <strong className="canva-template-title">{template.title}</strong>
+      {template.reason ? <p className="canva-template-reason">{template.reason}</p> : null}
+      <em className="canva-template-cta">
+        <span>Abrir en Canva</span>
+        <span aria-hidden="true">↗</span>
+      </em>
+    </a>
+  );
+}
+
 export function VisualReviewCard({ analysis }: Props) {
   const titleId = useId();
   const searchId = useId();
@@ -197,34 +277,17 @@ export function VisualReviewCard({ analysis }: Props) {
 
       <section className="review-section">
         <div className="review-templates-head">
-          <h4>Plantillas de Canva para rediseñarlo</h4>
-          <p>Se abren listas para editar</p>
+          <div className="review-templates-title-group">
+            <h4>Plantillas recomendadas en Canva</h4>
+            <span className="canva-online-indicator">En línea</span>
+          </div>
+          <p>Sugerencias personalizadas por IA para rediseñar en Canva en vivo</p>
         </div>
 
         {templates.length > 0 && (
           <div className="review-template-grid">
             {templates.map((template, index) => (
-              <a
-                key={index}
-                className="review-template"
-                href={template.canva_url}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span className="review-template-thumb">
-                  {template.thumbnail_url ? (
-                    // Provider-supplied thumbnails come from hosts the image
-                    // optimizer is not configured for.
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={template.thumbnail_url} alt="" loading="lazy" />
-                  ) : (
-                    <span aria-hidden="true">◫</span>
-                  )}
-                </span>
-                <strong>{template.title}</strong>
-                {template.reason ? <p>{template.reason}</p> : null}
-                <em>Abrir en Canva ↗</em>
-              </a>
+              <CanvaTemplateCard key={index} template={template} index={index} />
             ))}
           </div>
         )}

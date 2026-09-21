@@ -41,7 +41,8 @@ def ensure_engine():
     if sys.platform == "win32":
         import asyncio
         try:
-            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            if not isinstance(asyncio.get_event_loop_policy(), asyncio.WindowsSelectorEventLoopPolicy):
+                asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         except Exception:
             pass
     if _engine is None:

@@ -25,16 +25,51 @@ function remove(key: string) {
   }
 }
 
-export function saveFirstPrompt(prompt: string) {
-  write(FIRST_PROMPT_KEY, prompt.trim());
+export interface FirstPromptPayload {
+  text: string;
+  intent?: "create_social_post" | "create_short_video_script" | "analyze_visual" | "ask_advisor";
+  attachmentIds?: string[];
 }
 
-export function takeFirstPrompt() {
-  const prompt = read(FIRST_PROMPT_KEY);
+export function saveFirstPrompt(
+  prompt: string | FirstPromptPayload,
+  intent?: FirstPromptPayload["intent"],
+  attachmentIds?: string[]
+) {
+  if (typeof prompt === "object") {
+    write(FIRST_PROMPT_KEY, JSON.stringify(prompt));
+  } else if (intent || attachmentIds?.length) {
+    write(FIRST_PROMPT_KEY, JSON.stringify({ text: prompt.trim(), intent, attachmentIds }));
+  } else {
+    write(FIRST_PROMPT_KEY, prompt.trim());
+  }
+}
+
+export function takeFirstPrompt(): FirstPromptPayload | null {
+  const raw = read(FIRST_PROMPT_KEY);
   remove(FIRST_PROMPT_KEY);
-  return prompt;
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && typeof parsed.text === "string") {
+      return parsed as FirstPromptPayload;
+    }
+  } catch {
+    // raw string
+  }
+  return { text: raw };
 }
 
-export function peekFirstPrompt() {
-  return read(FIRST_PROMPT_KEY);
+export function peekFirstPrompt(): string | null {
+  const raw = read(FIRST_PROMPT_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && typeof parsed.text === "string") {
+      return parsed.text;
+    }
+  } catch {
+    // raw string
+  }
+  return raw;
 }
