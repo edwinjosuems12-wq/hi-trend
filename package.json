@@ -26,6 +26,7 @@
     "web:test:e2e": "npm run test:e2e -w starter/web",
     "web:test:e2e:beta": "npm run test:e2e -w starter/web -- tests/e2e/beta-readiness.spec.ts",
     "images:worker": "node scripts/run-images-worker.mjs",
+    "firebase:deploy": "firebase deploy --only apphosting",
     "dev": "node scripts/dev.mjs"
   }
 }

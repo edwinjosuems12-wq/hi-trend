@@ -1,13 +1,13 @@
 {
   "apphosting": {
     "backendId": "hitrend",
-    "rootDir": ".",
+    "rootDir": "starter/web",
     "ignore": [
       "node_modules",
       ".git",
+      ".next",
       "firebase-debug.log",
-      "firebase-debug.*.log",
-      "functions"
+      "firebase-debug.*.log"
     ]
   }
 }

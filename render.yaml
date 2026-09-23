@@ -49,3 +49,13 @@ services:
         sync: false
       - key: GOOGLE_REDIRECT_URI
         sync: false
+      - key: IMAGE_GENERATION_ENABLED
+        value: "1"
+      - key: IMAGE_PROVIDER
+        value: replicate
+      - key: IMAGE_GENERATION_MODEL
+        value: black-forest-labs/flux-schnell
+      - key: IMAGE_GENERATION_ALLOWED_MODELS
+        value: black-forest-labs/flux-schnell
+      - key: REPLICATE_API_KEY
+        sync: false

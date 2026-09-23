@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
+import logging
+import secrets
 import sys
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from time import monotonic
+from uuid import uuid4
+
 if sys.platform == "win32":
-    import asyncio
     import selectors
     try:
         asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -10,13 +18,6 @@ if sys.platform == "win32":
         asyncio.set_event_loop(loop)
     except Exception:
         pass
-
-import logging
-import secrets
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
-from time import monotonic
-from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -58,7 +59,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await get_ephemeral_store().ensure_available()
     if settings.is_demo:
         await _seed_templates()
-    yield
+
+    worker_task = None
+    stop_worker = asyncio.Event()
+    if settings.image_generation_enabled:
+        from app.images.worker import run_forever
+
+        worker_task = asyncio.create_task(
+            run_forever(interval=3.0, batch=3, stop=stop_worker)
+        )
+        logger.info("Worker de generacion de imagenes iniciado en segundo plano")
+
+    try:
+        yield
+    finally:
+        stop_worker.set()
+        if worker_task is not None:
+            worker_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await worker_task
 
 
 async def _seed_templates() -> None:

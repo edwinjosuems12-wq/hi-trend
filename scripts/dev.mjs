@@ -160,11 +160,20 @@ function start({ name, args, env, critical }) {
     env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"],
     detached: !isWindows,
+    shell: isWindows,
   });
 
   children.set(child, { name, critical });
   pipe(child.stdout, name);
   pipe(child.stderr, name);
+
+  child.on("error", (error) => {
+    warn([`${name} error al iniciar: ${error.message}`]);
+    if (critical) {
+      process.exitCode = 1;
+      shutdown();
+    }
+  });
 
   child.on("exit", (code, signal) => {
     children.delete(child);

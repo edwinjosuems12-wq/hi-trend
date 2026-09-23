@@ -48,18 +48,27 @@ export function LandingPosterRail() {
     let pointerStart = 0;
     let frame = 0;
 
-    function metrics() {
-      const cardWidth = cards[0]?.getBoundingClientRect().width || 0;
-      const spacing = cardWidth * 0.8;
-      return {
-        spacing,
-        total: spacing * cards.length,
-        speed: Math.max(18, cardWidth * 0.12),
-      };
+    let spacing = 0;
+    let total = 0;
+    let speed = 24;
+
+    function updateMetrics() {
+      // offsetWidth is not affected by CSS 2D/3D transforms (unlike getBoundingClientRect)
+      const cardWidth = cards[0]?.offsetWidth || cards[0]?.getBoundingClientRect().width || 190;
+      const newSpacing = cardWidth * 0.8;
+      const newTotal = newSpacing * cards.length;
+      const newSpeed = Math.max(18, cardWidth * 0.12);
+
+      if (total > 0 && newTotal > 0) {
+        offset = (offset / total) * newTotal;
+      }
+      spacing = newSpacing;
+      total = newTotal;
+      speed = newSpeed;
     }
 
     function render() {
-      const { spacing, total } = metrics();
+      if (!total || !spacing) return;
       cards.forEach((card, index) => {
         const x = wrapRailOffset(index * spacing - offset + dragX, total);
         const fan = Math.max(-2.6, Math.min(2.6, spacing ? x / spacing : 0));
@@ -76,13 +85,9 @@ export function LandingPosterRail() {
     }
 
     function tick(now: number) {
-      const dt = Math.min(50, now - lastTime) / 1000;
+      const dt = Math.min(50, Math.max(0, now - lastTime)) / 1000;
       lastTime = now;
-      const { speed, total } = metrics();
-      if (!paused && !dragging && !reduceMotion.matches) {
-        // Normalize every frame instead of allowing `offset` to grow forever.
-        // Otherwise the modulo calculation eventually loses enough floating
-        // point precision to make the rail jump or appear to accelerate.
+      if (!paused && !dragging && !reduceMotion.matches && total > 0) {
         offset = wrapRailOffset(offset + speed * dt, total);
       }
       render();
@@ -103,7 +108,11 @@ export function LandingPosterRail() {
 
     function endDrag(event: PointerEvent) {
       if (!dragging) return;
-      offset -= dragX;
+      if (total > 0) {
+        offset = (((offset - dragX) % total) + total) % total;
+      } else {
+        offset -= dragX;
+      }
       dragX = 0;
       dragging = false;
       if (stageElement.hasPointerCapture(event.pointerId))
@@ -115,11 +124,22 @@ export function LandingPosterRail() {
     };
     const resume = () => {
       paused = reduceMotion.matches;
+      lastTime = performance.now();
     };
     const onMotionPreferenceChange = () => {
       paused = reduceMotion.matches;
       render();
     };
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        paused = true;
+      } else {
+        lastTime = performance.now();
+        paused = reduceMotion.matches;
+      }
+    };
+
+    updateMetrics();
 
     stageElement.addEventListener("pointerenter", pause);
     stageElement.addEventListener("pointerleave", resume);
@@ -127,8 +147,23 @@ export function LandingPosterRail() {
     stageElement.addEventListener("pointermove", onPointerMove);
     stageElement.addEventListener("pointerup", endDrag);
     stageElement.addEventListener("pointercancel", endDrag);
-    window.addEventListener("resize", render, { passive: true });
+
+    const onResize = () => {
+      updateMetrics();
+      render();
+    };
+    window.addEventListener("resize", onResize, { passive: true });
+    document.addEventListener("visibilitychange", onVisibilityChange);
     reduceMotion.addEventListener?.("change", onMotionPreferenceChange);
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        updateMetrics();
+        render();
+      });
+      resizeObserver.observe(stageElement);
+    }
 
     render();
     frame = requestAnimationFrame(tick);
@@ -141,8 +176,12 @@ export function LandingPosterRail() {
       stageElement.removeEventListener("pointermove", onPointerMove);
       stageElement.removeEventListener("pointerup", endDrag);
       stageElement.removeEventListener("pointercancel", endDrag);
-      window.removeEventListener("resize", render);
+      window.removeEventListener("resize", onResize);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       reduceMotion.removeEventListener?.("change", onMotionPreferenceChange);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
     };
   }, []);
 

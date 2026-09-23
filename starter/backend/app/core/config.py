@@ -951,6 +951,12 @@ class Settings:
                 and self.image_generation_model
                 and self.image_generation_model in self.image_generation_allowed_models
             )
+        if self.image_provider == "replicate":
+            return bool(
+                self.replicate_api_key
+                and self.image_generation_model
+                and self.image_generation_model in self.image_generation_allowed_models
+            )
         return False
 
     @property

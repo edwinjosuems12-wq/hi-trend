@@ -12,7 +12,7 @@ from app.providers.factory import (
     get_video_generation_provider,
     get_vision_provider,
 )
-from app.providers.images import OpenAIImageGenerationProvider
+from app.providers.images import OpenAIImageGenerationProvider, ReplicateImageGenerationProvider
 from app.providers.video import OpenAIVideoGenerationProvider
 from app.providers.vision import DemoVisionReviewProvider
 
@@ -247,6 +247,24 @@ def test_factory_selects_direct_openai_media_providers(monkeypatch) -> None:
 
     assert isinstance(get_image_generation_provider(), OpenAIImageGenerationProvider)
     assert isinstance(get_video_generation_provider(), OpenAIVideoGenerationProvider)
+
+
+def test_factory_selects_direct_replicate_image_provider(monkeypatch) -> None:
+    configured = Settings(
+        {
+            "APP_ENV": "development",
+            "REPLICATE_API_KEY": SECRET,
+            "IMAGE_GENERATION_ENABLED": "1",
+            "IMAGE_PROVIDER": "replicate",
+            "IMAGE_GENERATION_MODEL": "black-forest-labs/flux-schnell",
+            "IMAGE_GENERATION_ALLOWED_MODELS": "black-forest-labs/flux-schnell",
+        }
+    )
+    monkeypatch.setattr("app.providers.factory.settings", configured)
+
+    assert configured.image_generation_configured is True
+    assert isinstance(get_image_generation_provider(), ReplicateImageGenerationProvider)
+
 
 
 def test_openrouter_configuration_uses_the_existing_openai_compatible_provider(monkeypatch) -> None:
