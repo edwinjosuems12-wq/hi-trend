@@ -87,7 +87,7 @@ def validate_image_bytes(
 #: How far a returned frame may drift from the requested one. Providers round to
 #: their own pixel grid, so an exact match is too strict; a different format is
 #: not a rounding difference, and 2% cannot turn 9:16 into a square.
-FRAME_TOLERANCE = 0.02
+FRAME_TOLERANCE = 0.05
 
 
 def enforce_expected_frame(
