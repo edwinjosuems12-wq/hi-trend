@@ -1111,6 +1111,10 @@ export const surfaceCopy = {
       previous: "Anterior",
       next: "Siguiente",
       whyPrefix: "Por qué",
+      originCustom: "Origen: plantilla de HiTrendy",
+      originCanva: "Origen: plantilla de Canva",
+      openInCanva: "Abrir en Canva",
+      canvaUnavailable: "Enlace no disponible",
     },
     auth: {
       demoLabel: "Contenido de ejemplo de HiTrendy",
@@ -1252,6 +1256,10 @@ export const surfaceCopy = {
       previous: "Previous",
       next: "Next",
       whyPrefix: "Why",
+      originCustom: "Source: HiTrendy template",
+      originCanva: "Source: Canva template",
+      openInCanva: "Open in Canva",
+      canvaUnavailable: "Link unavailable",
     },
     auth: {
       demoLabel: "HiTrendy sample content",
@@ -1392,6 +1400,10 @@ export const surfaceCopy = {
       previous: "Anterior",
       next: "Próximo",
       whyPrefix: "Por quê",
+      originCustom: "Origem: template da HiTrendy",
+      originCanva: "Origem: template do Canva",
+      openInCanva: "Abrir no Canva",
+      canvaUnavailable: "Link indisponível",
     },
     auth: {
       demoLabel: "Conteúdo de exemplo da HiTrendy",

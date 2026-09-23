@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { RouteSplash } from "@/components/auth/route-splash";
 import { api, ApiError } from "@/lib/api";
-import { routes } from "@/lib/routes";
+import { resolveNextPath, routes } from "@/lib/routes";
 
 type RouteState = "checking" | "ready";
 
@@ -22,6 +22,23 @@ type PendingSignupBehavior = "resume" | "notice";
 
 function isExpectedUnauthenticated(error: unknown) {
   return error instanceof ApiError && error.status === 401;
+}
+
+/**
+ * Where an already-signed-in visitor belongs.
+ *
+ * ProtectedRoute sends anyone it cannot verify to `/login?next=<page>`, so a
+ * session that turns out to be valid after all has to be handed back to the
+ * page that was asked for. Sending everyone to the dashboard instead made any
+ * bounce through here look like the app refusing to open the page.
+ *
+ * Read from `window` rather than `useSearchParams` on purpose: this component
+ * also wraps /register and /reset-password, and that hook would force a
+ * Suspense boundary into both. The effect this serves is client-only.
+ */
+function requestedDestination() {
+  if (typeof window === "undefined") return routes.dashboard;
+  return resolveNextPath(new URLSearchParams(window.location.search).get("next"));
 }
 
 export function PublicAuthRoute({
@@ -44,7 +61,7 @@ export function PublicAuthRoute({
     async function check() {
       try {
         await api.auth.me();
-        if (active) router.replace(routes.dashboard);
+        if (active) router.replace(requestedDestination());
         return;
       } catch (error) {
         // These pages guard nothing, so they fail open on purpose: when the

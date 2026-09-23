@@ -218,6 +218,31 @@ async def test_create_project_from_nonexistent_artifact(
 
 
 @pytest.mark.asyncio
+async def test_create_project_from_canva_catalog_template_is_refused_clearly(
+    client: AsyncClient,
+) -> None:
+    """A browse-only catalogue id must not be answered with "no existe".
+
+    ``GET /templates`` lists these entries and ``GET /templates/{id}`` resolves
+    them, so a 404 here would contradict the two endpoints that handed the id
+    out. They carry no editable slots, which is the actual reason a project
+    cannot start from one.
+    """
+    listed = await client.get("/api/v1/templates")
+    catalog = [item for item in listed.json() if item["source"] == "canva"]
+    assert catalog, "el catálogo de Canva debería estar en la lista"
+
+    resp = await client.post(
+        "/api/v1/projects",
+        json={"template_id": catalog[0]["id"], "business_id": "biz_demo"},
+        headers={"X-Workspace-Id": WORKSPACE_ID},
+    )
+
+    assert resp.status_code == 422
+    assert "Canva" in resp.json()["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_project_isolation_by_workspace(client: AsyncClient, artifact_id: str) -> None:
     create_resp = await client.post(
         "/api/v1/projects",

@@ -2,6 +2,8 @@
 
 import { useId, useState, type FormEvent } from "react";
 
+import { TemplateCover } from "@/components/templates/template-cover";
+
 export interface VisualImprovement {
   priority: "high" | "medium" | "low";
   area: string;
@@ -14,6 +16,8 @@ export interface CanvaTemplateRec {
   canva_url: string;
   thumbnail_url?: string;
   reason?: string;
+  /** Niche token used to draw a cover when Canva gives us no thumbnail. */
+  cover?: string | null;
 }
 
 export interface VisualAnalysis {
@@ -102,6 +106,8 @@ function CanvaTemplateCard({
             loading="lazy"
             onError={() => setImgError(true)}
           />
+        ) : template.cover ? (
+          <TemplateCover cover={template.cover} title={template.title} />
         ) : (
           <div className="canva-mockup-visual" data-variant={index % 3}>
             <div className="canva-mockup-badge-bar">

@@ -99,6 +99,10 @@ def template_to_dict(t: Template) -> dict:
         "aspect_ratio": t.aspect_ratio,
         "editable_slots": _deserialize(t.editable_slots),
         "description": t.description,
+        # Distinguishes a fillable DB template from a Canva browse entry, and
+        # DB templates ship a real thumbnail so they need no drawn cover.
+        "source": "custom",
+        "cover": None,
     }
 
 

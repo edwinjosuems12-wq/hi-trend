@@ -10,9 +10,22 @@ import {
   type TemplateCategory,
   type TemplatePresentation,
 } from "@/lib/template-catalog";
-import type { Template } from "@/types/template";
+import type { Template, TemplateSource } from "@/types/template";
 import type { AppLocale } from "@/lib/i18n";
 import { surfaceCopy } from "@/lib/i18n";
+import { TemplateCover } from "./template-cover";
+
+/** Product names, so they read the same in every locale. */
+const SOURCE_BADGE: Record<TemplateSource, string> = {
+  custom: "HiTrendy",
+  canva: "Canva",
+};
+
+/** Canva entries ship no editable slots, so the studio would open empty. */
+function openInCanva(url: string) {
+  const target = window.open(url, "_blank", "noopener,noreferrer");
+  if (target) target.opener = null;
+}
 
 interface Props {
   templates: Template[];
@@ -99,6 +112,17 @@ export function TemplateLibrary({ templates, onUse, compact = false, copy }: Pro
               >
                 <TemplateThumbnail template={template} compact={compact} copy={copy} />
                 <span>{template.displayCategory}</span>
+                <div
+                  className="template-source-badge"
+                  data-source={template.source}
+                >
+                  <div className="visually-hidden">
+                    {template.source === "canva"
+                      ? copy.originCanva
+                      : copy.originCustom}
+                  </div>
+                  <div aria-hidden="true">{SOURCE_BADGE[template.source]}</div>
+                </div>
               </div>
               <div className="visual-template-copy">
                 <h2>{template.title}</h2>
@@ -106,16 +130,30 @@ export function TemplateLibrary({ templates, onUse, compact = false, copy }: Pro
                   {template.displayCategory} ·{" "}
                   {template.aspectRatio.replaceAll(" / ", ":")}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => void startTemplate(template)}
-                  disabled={usingTemplateId !== null}
-                >
-                  {usingTemplateId === template.id
-                    ? copy.preparing
-                    : copy.use}{" "}
-                  <span aria-hidden="true">→</span>
-                </button>
+                {template.source === "canva" ? (
+                  <button
+                    type="button"
+                    data-source="canva"
+                    onClick={() => openInCanva(template.canva_url as string)}
+                    disabled={!template.canva_url}
+                  >
+                    {template.canva_url
+                      ? copy.openInCanva
+                      : copy.canvaUnavailable}{" "}
+                    <span aria-hidden="true">↗</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void startTemplate(template)}
+                    disabled={usingTemplateId !== null}
+                  >
+                    {usingTemplateId === template.id
+                      ? copy.preparing
+                      : copy.use}{" "}
+                    <span aria-hidden="true">→</span>
+                  </button>
+                )}
               </div>
             </article>
           ))}
@@ -142,6 +180,18 @@ function TemplateThumbnail({
   copy: (typeof surfaceCopy)[AppLocale]["templates"];
 }) {
   const [failed, setFailed] = useState(false);
+
+  // No bitmap at all: a Canva entry, whose thumbnails are not public. Its niche
+  // cover is a real design, so it is the card's image rather than a fallback.
+  if (!template.thumbnail_url) {
+    return (
+      <TemplateCover
+        cover={template.cover}
+        title={template.title}
+        aspectRatio={template.aspectRatio}
+      />
+    );
+  }
 
   if (failed) {
     return (

@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import NotFoundError
 from app.dependencies import get_db, require_workspace
+from app.templates.canva_catalog import get_canva_template, list_canva_templates
 from app.templates.repository import get_template, list_templates
 
 router = APIRouter(prefix="/templates", tags=["templates"])
@@ -26,8 +28,17 @@ async def list_templates_endpoint(
     search: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
-    return await list_templates(
+    templates = await list_templates(
         db,
+        platform=platform,
+        format=format,
+        category=category,
+        objective=objective,
+        search=search,
+    )
+    # The five fillable templates lead; the Canva catalog follows so the page
+    # still has something to browse once they run out.
+    return templates + list_canva_templates(
         platform=platform,
         format=format,
         category=category,
@@ -42,6 +53,8 @@ async def recommend_templates_endpoint(
     workspace_id: str = Depends(require_workspace),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict]:
+    # Ranking stays on DB templates only: a catalog entry has no editable
+    # slots, so recommending one would hand the studio nothing to fill.
     candidates = await list_templates(db)
     ranked: list[dict] = []
     for template in candidates:
@@ -66,4 +79,10 @@ async def get_template_endpoint(
     template_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    return await get_template(db, template_id)
+    try:
+        return await get_template(db, template_id)
+    except NotFoundError:
+        catalog_entry = get_canva_template(template_id)
+        if catalog_entry is None:
+            raise
+        return catalog_entry

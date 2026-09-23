@@ -25,14 +25,21 @@ logger = logging.getLogger(__name__)
 
 CANVA_SEARCH_BASE = "https://www.canva.com/templates/"
 
-#: Format-scoped search paths. The key is what callers ask for; the value is
-#: the Canva listing that only returns that format.
-CANVA_FORMAT_PATHS = {
-    "instagram_post": "https://www.canva.com/instagram-posts/templates/",
-    "instagram_story": "https://www.canva.com/instagram-stories/templates/",
-    "facebook_post": "https://www.canva.com/facebook-posts/templates/",
-    "flyer": "https://www.canva.com/flyers/templates/",
-    "poster": "https://www.canva.com/posters/templates/",
+#: Words that scope a search to a format.
+#:
+#: These used to be paths -- https://www.canva.com/instagram-posts/templates/
+#: and friends -- with the search appended as ?query=. Canva ignores the
+#: parameter there: those pages emit a canonical tag that drops the query
+#: string, and the searched words appear nowhere in what they return, so every
+#: recommendation landed on the same evergreen category gallery no matter what
+#: had been searched for. Only /templates/?query= actually searches, so the
+#: format has to travel inside the query text instead of in the path.
+CANVA_FORMAT_TERMS = {
+    "instagram_post": "instagram post",
+    "instagram_story": "instagram story",
+    "facebook_post": "facebook post",
+    "flyer": "flyer",
+    "poster": "poster",
 }
 
 #: Hosts a recommendation is allowed to point at.
@@ -73,10 +80,10 @@ def canva_keywords(*parts: str | None, limit: int = 5) -> list[str]:
 
 def canva_search_url(terms: Sequence[str] | str, *, fmt: str = "instagram_post") -> str:
     """Build a format-scoped Canva template search for ``terms``."""
-    base = CANVA_FORMAT_PATHS.get(fmt, CANVA_SEARCH_BASE)
     joined = terms if isinstance(terms, str) else " ".join(terms)
-    query = urllib.parse.quote_plus(joined.strip())
-    return f"{base}?query={query}" if query else base
+    scoped = " ".join(part for part in (CANVA_FORMAT_TERMS.get(fmt, ""), joined.strip()) if part)
+    query = urllib.parse.quote_plus(scoped)
+    return f"{CANVA_SEARCH_BASE}?query={query}" if query else CANVA_SEARCH_BASE
 
 
 def normalize_canva_url(url: object, fallback_terms: Sequence[str]) -> str:
@@ -126,6 +133,48 @@ def build_canva_search_plan(request: "VisionReviewRequest") -> dict:
             or "tipografia grande",
         ],
     }
+
+
+#: Niche token the web turns into a designed cover when a recommendation has no
+#: bitmap. Deliberately compact: the web keeps a far richer keyword table in
+#: ``lib/canva-templates.ts`` and duplicating it here would leave two lists to
+#: keep in sync, so this one holds only the words that decide a cover.
+_COVER_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("gastronomy", ("gastronom", "restaurante", "comida", "cafe", "café", "panader", "pizza", "bar")),
+    ("beauty", ("belleza", "salon", "salón", "spa", "uñas", "maquillaje", "peluquer", "barber")),
+    ("fashion", ("moda", "ropa", "boutique", "zapato", "accesorio", "fashion")),
+    ("fitness", ("gimnasio", "gym", "fitness", "entrenamiento", "crossfit", "yoga")),
+    ("health", ("salud", "health", "clinic", "clínic", "dental", "médic", "medic", "farmacia", "psicolog")),
+    ("technology", ("tecnolog", "technology", "software", "digital", "computad", "celular", "electrónic")),
+    ("education", ("educac", "curso", "academia", "escuela", "clases", "tutor")),
+    ("real_estate", ("inmobiliar", "bienes raices", "bienes raíces", "apartamento", "propiedad")),
+    ("automotive", ("automotriz", "taller", "carro", "vehícul", "vehicul", "llanta", "mecánic")),
+    ("travel", ("viaje", "turismo", "hotel", "tour", "hostal")),
+    ("events", ("evento", "boda", "fiesta", "catering", "banquete", "decorac")),
+    ("pets", ("mascota", "perro", "gato", "veterinar")),
+)
+
+#: Categories such as "retail", "services" or "other" name no niche; a
+#: promotional look is the least wrong cover for them.
+_DEFAULT_COVER = "events"
+
+
+def cover_for(request: "VisionReviewRequest") -> str:
+    """Pick the niche token whose cover best fits this business."""
+    category = (request.business_category or "").strip().lower()
+    # The onboarding category vocabulary already overlaps the cover tokens, so
+    # an exact match beats guessing from free text.
+    if category in {token for token, _ in _COVER_KEYWORDS}:
+        return category
+    haystack = " ".join(
+        part.lower()
+        for part in (request.business_category, request.primary_product, request.business_name)
+        if part
+    )
+    for token, keywords in _COVER_KEYWORDS:
+        if any(keyword in haystack for keyword in keywords):
+            return token
+    return _DEFAULT_COVER
 
 
 @dataclass(frozen=True)
@@ -220,23 +269,27 @@ class DemoVisionReviewProvider:
             "Texturas o fondos planos que restan protagonismo a la fotografía principal del producto.",
         ]
 
+        cover = cover_for(request)
         canva_templates = [
             {
                 "title": f"Post promocional para {category}",
                 "canva_url": canva_search_url(plan["promo"]),
-                "thumbnail_url": "",
+                "thumbnail_url": "/templates/flores.png",
+                "cover": cover,
                 "reason": f"Estructura equilibrada para anunciar {product} con la oferta visible.",
             },
             {
                 "title": "Producto destacado con foto grande",
                 "canva_url": canva_search_url(plan["product"]),
-                "thumbnail_url": "",
+                "thumbnail_url": "/templates/coffee.png",
+                "cover": cover,
                 "reason": "Deja la fotografía como protagonista y el titular limpio encima.",
             },
             {
                 "title": f"Identidad de marca de {biz_name}",
                 "canva_url": canva_search_url(plan["brand"]),
-                "thumbnail_url": "",
+                "thumbnail_url": "/templates/about-collage.png",
+                "cover": cover,
                 "reason": f"Formatos sobrios para consolidar la imagen frente a {audience}.",
             },
         ]
@@ -377,6 +430,7 @@ class OpenAICompatibleVisionReviewProvider:
         """
         plan = build_canva_search_plan(request)
         fallbacks = [plan["promo"], plan["product"], plan["brand"]]
+        cover = cover_for(request)
 
         # Normalize improvements to match schema literals
         priority_map = {
@@ -413,6 +467,9 @@ class OpenAICompatibleVisionReviewProvider:
             for index, template in enumerate(templates):
                 if not isinstance(template, dict):
                     continue
+                # The model returns no artwork, so the web needs a niche to
+                # draw a cover from instead of an empty card.
+                template["cover"] = cover
                 fallback = fallbacks[index % len(fallbacks)]
                 query = template.pop("canva_query", None)
                 if isinstance(query, str) and query.strip():

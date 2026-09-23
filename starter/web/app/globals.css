@@ -7570,6 +7570,34 @@ img {
   color: var(--shell-heading);
 }
 
+/* The sweep above dresses page content for the dark shell, and assumes that
+   content sits on it. The review card does not: it is a light panel inside
+   .app-page, so the same rule paints its headings, its emphasis and its
+   definition text white on white and the analysis becomes unreadable. Putting
+   the card's own ink back here, rather than narrowing the sweep, leaves every
+   other page working exactly as it did. */
+[data-theme="dark-shell"] .app-page .review-card h3,
+[data-theme="dark-shell"] .app-page .review-card h4,
+[data-theme="dark-shell"] .app-page .review-card strong,
+[data-theme="dark-shell"] .app-page .review-card dd {
+  color: var(--chat-card-foreground);
+}
+
+/* The verdict colours are what tie each column to its meaning, and they lose
+   to the sweep on order alone -- both selectors are (0,2,1). */
+[data-theme="dark-shell"]
+  .app-page
+  .review-split-column[data-tone="positive"]
+  h4 {
+  color: var(--chat-card-positive);
+}
+[data-theme="dark-shell"]
+  .app-page
+  .review-split-column[data-tone="critical"]
+  h4 {
+  color: var(--chat-card-critical);
+}
+
 /* --gradient-primary keeps its purple in both themes, so the CTA keeps white
    text even though --primary-foreground is now ink. */
 [data-theme="dark-shell"] .button-primary {
@@ -8293,4 +8321,257 @@ img {
   .template-carousel-arrow {
     transition: none;
   }
+}
+
+/* -- Drawn template covers ------------------------------------------------ */
+/* Catalogue entries that carry no bitmap (Canva thumbnails are not publicly
+   addressable) are drawn here instead of left blank. Every niche is a palette
+   plus a motif, keyed by data-cover, so the component stays free of per-niche
+   inline styles.
+
+   Contrast: all cover text is pure #fff on the flat --cover-bg, and the
+   monogram inverts that pair (--cover-bg on #fff), so one ratio governs each
+   niche. Measured white-on-background, WCAG 2.1:
+     technology 12.24  education 11.83  events 11.55  fashion 12.26
+     beauty      9.43  gastronomy 8.60  pets    7.46  real_estate 9.06
+     fitness     8.25  health     8.10  travel  9.08  automotive 13.66
+     default    14.54
+   The lowest is 7.46:1 — past AA (4.5:1) and AAA (7:1) for every niche. The
+   eyebrow is never dimmed with opacity for the same reason: it would drop the
+   measured ratio below the value stated here. */
+.template-cover {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  color: #fff;
+  background: var(--cover-bg);
+  container-type: inline-size;
+}
+.template-cover-art {
+  grid-row: 1;
+  grid-column: 1;
+  background-image: var(--cover-motif);
+  background-position: center;
+  background-size: var(--cover-motif-size, auto);
+}
+.template-cover-mark {
+  display: grid;
+  grid-row: 1;
+  grid-column: 1;
+  place-self: center;
+  place-items: center;
+  width: 2.9rem;
+  height: 2.9rem;
+  color: var(--cover-bg);
+  background: #fff;
+  border-radius: 0.85rem;
+  font-family: var(--font-heading, inherit);
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+.template-cover-caption {
+  display: grid;
+  grid-row: 2;
+  grid-column: 1;
+  gap: 0.1rem;
+  padding: 0.5rem 0.6rem 0.55rem;
+  /* Opaque on purpose: the motif must not tint the strip the text sits on, or
+     the ratios above stop being the ones actually rendered. */
+  background: var(--cover-bg);
+}
+.template-cover-niche {
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.template-cover-title {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+/* 9 / 16 gives the art field far more height than width, so the mark shrinks
+   to stop it dominating the frame. */
+.template-cover[data-ratio="tall"] .template-cover-mark {
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 0.95rem;
+}
+/* The analysis card renders the same cover at roughly a third of the gallery
+   size; a container query rescales it there without a second component. */
+@container (max-width: 8rem) {
+  .template-cover-mark {
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: 0.5rem;
+    font-size: 0.62rem;
+  }
+  .template-cover[data-ratio="tall"] .template-cover-mark {
+    width: 1.6rem;
+    height: 1.6rem;
+    font-size: 0.6rem;
+  }
+  .template-cover-caption {
+    padding: 0.28rem 0.34rem 0.32rem;
+  }
+  .template-cover-niche {
+    font-size: 0.46rem;
+    letter-spacing: 0.07em;
+  }
+  .template-cover-title {
+    font-size: 0.56rem;
+    -webkit-line-clamp: 1;
+  }
+}
+
+.template-cover[data-cover="technology"] {
+  --cover-bg: #12365e;
+  --cover-motif:
+    repeating-linear-gradient(
+      0deg,
+      rgb(255 255 255 / 0.16) 0 1px,
+      transparent 1px 14px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgb(255 255 255 / 0.16) 0 1px,
+      transparent 1px 14px
+    );
+}
+.template-cover[data-cover="education"] {
+  --cover-bg: #2b2e7a;
+  --cover-motif: repeating-linear-gradient(
+    0deg,
+    rgb(255 255 255 / 0.22) 0 2px,
+    transparent 2px 13px
+  );
+}
+.template-cover[data-cover="events"] {
+  --cover-bg: #4b2080;
+  --cover-motif:
+    radial-gradient(circle at 20% 24%, rgb(255 255 255 / 0.34) 0 2px, transparent 2px),
+    radial-gradient(circle at 72% 58%, rgb(255 255 255 / 0.26) 0 3px, transparent 3px),
+    radial-gradient(circle at 44% 86%, rgb(255 255 255 / 0.3) 0 2px, transparent 2px);
+  --cover-motif-size: 34px 34px;
+}
+.template-cover[data-cover="fashion"] {
+  --cover-bg: #5c1a4e;
+  --cover-motif: repeating-linear-gradient(
+    45deg,
+    rgb(255 255 255 / 0.18) 0 6px,
+    transparent 6px 17px
+  );
+}
+.template-cover[data-cover="beauty"] {
+  --cover-bg: #86164a;
+  --cover-motif: repeating-radial-gradient(
+    circle at 50% 32%,
+    transparent 0 10px,
+    rgb(255 255 255 / 0.2) 10px 12px
+  );
+}
+.template-cover[data-cover="gastronomy"] {
+  --cover-bg: #8b2a16;
+  --cover-motif: repeating-conic-gradient(
+    rgb(255 255 255 / 0.16) 0% 25%,
+    transparent 0% 50%
+  );
+  --cover-motif-size: 22px 22px;
+}
+.template-cover[data-cover="pets"] {
+  --cover-bg: #7a4a0f;
+  --cover-motif:
+    radial-gradient(circle at 30% 30%, rgb(255 255 255 / 0.26) 0 4px, transparent 4px),
+    radial-gradient(circle at 63% 22%, rgb(255 255 255 / 0.22) 0 2.5px, transparent 2.5px),
+    radial-gradient(circle at 46% 64%, rgb(255 255 255 / 0.3) 0 5.5px, transparent 5.5px);
+  --cover-motif-size: 42px 42px;
+}
+.template-cover[data-cover="real_estate"] {
+  --cover-bg: #4e4a18;
+  --cover-motif:
+    linear-gradient(45deg, rgb(255 255 255 / 0.2) 25%, transparent 25%),
+    linear-gradient(-45deg, rgb(255 255 255 / 0.2) 25%, transparent 25%);
+  --cover-motif-size: 20px 20px;
+}
+.template-cover[data-cover="fitness"] {
+  --cover-bg: #1d5a28;
+  --cover-motif:
+    repeating-linear-gradient(
+      45deg,
+      rgb(255 255 255 / 0.2) 0 4px,
+      transparent 4px 15px
+    ),
+    repeating-linear-gradient(
+      135deg,
+      rgb(255 255 255 / 0.2) 0 4px,
+      transparent 4px 15px
+    );
+}
+.template-cover[data-cover="health"] {
+  --cover-bg: #0a5a50;
+  --cover-motif:
+    linear-gradient(
+      180deg,
+      transparent 0 46%,
+      rgb(255 255 255 / 0.28) 46% 49%,
+      transparent 49%
+    ),
+    radial-gradient(circle at 50% 47%, rgb(255 255 255 / 0.24) 0 16%, transparent 58%);
+  --cover-motif-size: 100% 100%;
+}
+.template-cover[data-cover="travel"] {
+  --cover-bg: #0b4f63;
+  --cover-motif: repeating-linear-gradient(
+    -45deg,
+    rgb(255 255 255 / 0.22) 0 5px,
+    transparent 5px 16px
+  );
+}
+.template-cover[data-cover="automotive"] {
+  --cover-bg: #2a2e33;
+  --cover-motif: repeating-linear-gradient(
+    90deg,
+    rgb(255 255 255 / 0.26) 0 2px,
+    transparent 2px 7px,
+    rgb(255 255 255 / 0.12) 7px 8px,
+    transparent 8px 19px
+  );
+}
+.template-cover[data-cover="default"] {
+  --cover-bg: #2e1a63;
+  --cover-motif: repeating-linear-gradient(
+    135deg,
+    rgb(255 255 255 / 0.14) 0 8px,
+    transparent 8px 20px
+  );
+}
+
+/* -- Template source badge ------------------------------------------------ */
+/* The category pill already owns the top-left corner of .visual-template-media,
+   so the origin sits opposite it. Opaque fills, not the pill's translucent one,
+   so the label keeps a fixed ratio over every cover hue behind it:
+   #fff on #180f4b is 17.37:1 and #062430 on #7ce0f5 is 10.62:1. */
+.template-source-badge {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  z-index: 1;
+  padding: 0.28rem 0.42rem;
+  color: #fff;
+  background: #180f4b;
+  border-radius: var(--radius-pill);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.template-source-badge[data-source="canva"] {
+  color: #062430;
+  background: #7ce0f5;
 }

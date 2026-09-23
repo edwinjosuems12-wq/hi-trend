@@ -47,4 +47,46 @@ describe("catálogo de plantillas", () => {
     );
     expect(seededTemplate.aspect_ratio).toBe("4:5");
   });
+
+  test("resuelve el origen y acepta una entrada de Canva sin miniatura", () => {
+    const canvaTemplate: Template = {
+      ...template,
+      id: "tpl_static_01",
+      title: "Menú del día",
+      thumbnail_url: null,
+      description: "Plantilla de restaurante para el menú semanal.",
+      source: "canva",
+      cover: "gastronomy",
+    };
+
+    const presentation = toTemplatePresentation(canvaTemplate);
+
+    expect(presentation.source).toBe("canva");
+    // El id coincide con un asset sembrado: la entrada de Canva no debe
+    // adoptarlo y presentar el diseño de otra plantilla como suyo.
+    expect(presentation.thumbnail_url).toBeNull();
+    expect(presentation.cover).toBe("gastronomy");
+  });
+
+  test("trata como propia la plantilla que llega sin origen declarado", () => {
+    expect(toTemplatePresentation(template).source).toBe("custom");
+  });
+
+  test("encuentra la entrada de Canva por su descripción y por categoría", () => {
+    const canvaTemplate: Template = {
+      ...template,
+      id: "canva_gastro_01",
+      title: "Menú del día",
+      thumbnail_url: null,
+      description: "Plantilla de restaurante para el menú semanal.",
+      source: "canva",
+      cover: "gastronomy",
+    };
+    const presentation = toTemplatePresentation(canvaTemplate);
+
+    expect(matchesTemplate(presentation, "restaurante", "all")).toBe(true);
+    expect(matchesTemplate(presentation, "menu", "all")).toBe(true);
+    expect(matchesTemplate(presentation, "", "ads")).toBe(true);
+    expect(matchesTemplate(presentation, "", "reels")).toBe(false);
+  });
 });

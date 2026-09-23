@@ -19,6 +19,7 @@ from app.core.errors import AppError, ConflictError, NotFoundError, ValidationEr
 from app.dependencies import get_db, require_workspace
 from app.domain.models import GeneratedShortVideoScript, GeneratedSocialPost, VideoScene
 from app.projects.models import CreationFlowEvent, Project
+from app.templates.canva_catalog import get_canva_template
 from app.templates.repository import get_template
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -103,6 +104,16 @@ async def create_project_endpoint(
     try:
         template_data: dict | None = None
         if body.template_id:
+            # The Canva catalogue is browse-only: its entries list and resolve
+            # like any other template but carry no editable slots, so a project
+            # started from one would open an empty composer. Saying that is the
+            # point -- letting get_template raise would answer "no existe" about
+            # an id the catalogue endpoint just handed out.
+            if get_canva_template(body.template_id) is not None:
+                raise ValidationError_(
+                    "Esa plantilla de Canva se edita en Canva. "
+                    "Elige una plantilla de HiTrendy para crear un proyecto."
+                )
             template_data = await get_template(db, body.template_id)
 
         if body.template_id and not body.artifact_id:

@@ -136,16 +136,21 @@ export default function DashboardPage() {
   }, [templates]);
 
   const heroCovers = useMemo(() => {
+    // Canva entries carry no bitmap; the rail renders images only, so they are
+    // skipped and the seeded covers take over when fewer than three remain.
     const covers = templates
       .slice(0, 3)
-      .map((template) => toTemplatePresentation(template).thumbnail_url);
+      .map((template) => toTemplatePresentation(template).thumbnail_url)
+      .filter((cover): cover is string => Boolean(cover));
     return covers.length === 3 ? covers : HERO_FALLBACK_COVERS;
   }, [templates]);
 
   const carouselItems = useMemo(() => {
     const whyPrefix = surfaceCopy[locale].templates.whyPrefix;
-    return recommended.map((template) => {
+    return recommended.flatMap((template) => {
       const presentation = toTemplatePresentation(template);
+      // The carousel card can only show a bitmap, and Canva entries have none.
+      if (!presentation.thumbnail_url) return [];
       return {
         id: presentation.id,
         title: presentation.title,

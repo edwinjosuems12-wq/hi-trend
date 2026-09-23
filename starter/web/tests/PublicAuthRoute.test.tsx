@@ -39,6 +39,48 @@ describe("PublicAuthRoute", () => {
     replace.mockClear();
     me.mockReset();
     getSignup.mockReset();
+    window.history.replaceState({}, "", "/login");
+  });
+
+  test("returns an authenticated visitor to the page they were sent from", async () => {
+    // ProtectedRoute bounces here as /login?next=<page> whenever it cannot
+    // verify a session. When the session turns out to be fine, dropping `next`
+    // is what made every such bounce end on the dashboard.
+    window.history.replaceState({}, "", "/login?next=%2Fstudio%2Fnew");
+    me.mockResolvedValue({ id: "user_1" });
+
+    render(
+      <PublicAuthRoute>
+        <p>Formulario</p>
+      </PublicAuthRoute>
+    );
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/studio/new"));
+  });
+
+  test("falls back to the dashboard when no destination was requested", async () => {
+    me.mockResolvedValue({ id: "user_1" });
+
+    render(
+      <PublicAuthRoute>
+        <p>Formulario</p>
+      </PublicAuthRoute>
+    );
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
+  });
+
+  test("refuses to forward an off-site destination", async () => {
+    window.history.replaceState({}, "", "/login?next=https%3A%2F%2Fevil.example");
+    me.mockResolvedValue({ id: "user_1" });
+
+    render(
+      <PublicAuthRoute>
+        <p>Formulario</p>
+      </PublicAuthRoute>
+    );
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/dashboard"));
   });
 
   test("shows the form when the session check itself fails", async () => {

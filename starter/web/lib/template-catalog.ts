@@ -1,4 +1,4 @@
-import type { Template } from "@/types/template";
+import type { Template, TemplateSource } from "@/types/template";
 
 export const templateCategories = [
   { id: "all", label: "Todos" },
@@ -15,6 +15,8 @@ export type TemplatePresentation = Template & {
   displayCategory: string;
   aspectRatio: "4 / 5" | "9 / 16";
   tags: string[];
+  /** Resolved, never optional: the card branches on it to pick its action. */
+  source: TemplateSource;
 };
 
 type PresentationMeta = Pick<
@@ -137,11 +139,16 @@ export function normalize(value: string) {
 export function toTemplatePresentation(
   template: Template
 ): TemplatePresentation {
-  const localThumbnail = localThumbnailById[template.id];
+  const source: TemplateSource = template.source === "canva" ? "canva" : "custom";
+  // Canva entries are drawn from their niche cover; handing them a seeded asset
+  // would show someone else's design as if it were the template.
+  const localThumbnail =
+    source === "canva" ? undefined : localThumbnailById[template.id];
   return {
     ...template,
     ...(metaById[template.id] || inferredMeta(template)),
     ...(localThumbnail ? { thumbnail_url: localThumbnail } : {}),
+    source,
   };
 }
 
@@ -156,6 +163,9 @@ export function matchesTemplate(
     template.displayCategory,
     template.formats.join(" "),
     template.tags.join(" "),
+    // Canva entries share their category with dozens of others; the niche wording
+    // that tells them apart only appears in the description.
+    template.description || "",
   ]
     .map(normalize)
     .join(" ");

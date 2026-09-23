@@ -1,4 +1,4 @@
-# Guía de Despliegue en Vercel y Render (24/7 en la Nube)
+# Guía de Despliegue en Vercel y Render
 
 Esta guía te permite publicar **HiTrendy** de forma permanente y gratuita en internet utilizando **Render** para el Backend y Base de Datos, y **Vercel** para el Frontend Web.
 
@@ -50,13 +50,13 @@ git push origin main
 
 ## Paso 4: Vincular el Dominio de Vercel en Render
 
-Una vez que tengas tu URL de Vercel (ej. `https://hitrendy.vercel.app`):
+La URL actual de Vercel es `https://hi-trend-web.vercel.app`:
 
 1. Ve a tu servicio `hitrendy-api` en [Render Dashboard](https://dashboard.render.com).
 2. Ve a la pestaña **Environment**.
 3. Configura o añade:
-   - `FRONTEND_URL`: `https://hitrendy.vercel.app`
-   - `ALLOWED_ORIGINS`: `https://hitrendy.vercel.app`
+   - `FRONTEND_URL`: `https://hi-trend-web.vercel.app`
+   - `ALLOWED_ORIGINS`: `https://hi-trend-web.vercel.app`
 4. Guarda los cambios para que se reinicie el servicio.
 
 ---
@@ -69,14 +69,14 @@ Para que el botón **"Continuar con Google"** funcione con tu nuevo dominio de V
 2. Selecciona tu ID de cliente OAuth 2.0.
 3. En **Orígenes de JavaScript autorizados**, añade:
    ```text
-   https://hitrendy.vercel.app
+   https://hi-trend-web.vercel.app
    ```
 4. En **URIs de redireccionamiento autorizados**, añade:
    ```text
-   https://hitrendy.vercel.app/api/v1/auth/google/callback
+   https://hi-trend-web.vercel.app/api/v1/auth/google/callback
    ```
 5. En Render, asegúrate de tener la variable:
-   - `GOOGLE_REDIRECT_URI`: `https://hitrendy.vercel.app/api/v1/auth/google/callback`
+   - `GOOGLE_REDIRECT_URI`: `https://hi-trend-web.vercel.app/api/v1/auth/google/callback`
 
 ---
 

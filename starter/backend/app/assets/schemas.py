@@ -23,6 +23,10 @@ class CanvaTemplateRecommendation(BaseModel):
     canva_url: str = Field(max_length=500)
     thumbnail_url: str = Field(default="", max_length=500)
     reason: str = Field(default="", max_length=500)
+    # No Canva template has a thumbnail we are allowed to fetch, so the card is
+    # drawn from this niche token instead. Declared here because extra="ignore"
+    # would otherwise drop it between the provider and the response.
+    cover: str | None = Field(default=None, max_length=40)
 
 
 class AssetAnalysisResult(BaseModel):

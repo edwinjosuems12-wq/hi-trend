@@ -1,10 +1,19 @@
+databases:
+  - name: hitrendy-db
+    plan: free
+    region: oregon
+    postgresMajorVersion: "17"
+
 services:
   - type: web
     name: hitrendy-api
     runtime: python
+    plan: free
+    region: oregon
     rootDir: starter/backend
     buildCommand: pip install -r requirements.txt
     startCommand: python -m alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health/live
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
@@ -13,7 +22,11 @@ services:
       - key: STORAGE_PROVIDER
         value: local
       - key: DATABASE_URL
-        sync: false
+        fromDatabase:
+          name: hitrendy-db
+          property: connectionString
+      - key: DATABASE_SSL_MODE
+        value: require
       - key: JWT_SECRET
         generateValue: true
       - key: CSRF_ENABLED
@@ -29,4 +42,10 @@ services:
       - key: ALLOWED_ORIGINS
         sync: false
       - key: FRONTEND_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
         sync: false
