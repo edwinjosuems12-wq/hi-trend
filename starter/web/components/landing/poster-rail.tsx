@@ -22,6 +22,12 @@ const POSTERS = [
 
 const RAIL_ITEMS = [...POSTERS, ...POSTERS];
 
+/** Keep the animation clock bounded so it cannot lose precision over time. */
+export function wrapRailOffset(value: number, total: number) {
+  if (!total) return 0;
+  return ((((value + total / 2) % total) + total) % total) - total / 2;
+}
+
 export function LandingPosterRail() {
   const stageRef = useRef<HTMLDivElement>(null);
 
@@ -52,15 +58,10 @@ export function LandingPosterRail() {
       };
     }
 
-    function wrap(value: number, total: number) {
-      if (!total) return 0;
-      return ((((value + total / 2) % total) + total) % total) - total / 2;
-    }
-
     function render() {
       const { spacing, total } = metrics();
       cards.forEach((card, index) => {
-        const x = wrap(index * spacing - offset + dragX, total);
+        const x = wrapRailOffset(index * spacing - offset + dragX, total);
         const fan = Math.max(-2.6, Math.min(2.6, spacing ? x / spacing : 0));
         const distance = Math.abs(fan);
         const rotate = fan * 4.45;
@@ -77,8 +78,13 @@ export function LandingPosterRail() {
     function tick(now: number) {
       const dt = Math.min(50, now - lastTime) / 1000;
       lastTime = now;
-      const { speed } = metrics();
-      if (!paused && !dragging && !reduceMotion.matches) offset += speed * dt;
+      const { speed, total } = metrics();
+      if (!paused && !dragging && !reduceMotion.matches) {
+        // Normalize every frame instead of allowing `offset` to grow forever.
+        // Otherwise the modulo calculation eventually loses enough floating
+        // point precision to make the rail jump or appear to accelerate.
+        offset = wrapRailOffset(offset + speed * dt, total);
+      }
       render();
       frame = requestAnimationFrame(tick);
     }

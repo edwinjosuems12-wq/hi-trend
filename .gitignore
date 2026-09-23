@@ -15,6 +15,7 @@ dist/
 .env.*
 !.env.example
 .envrc
+.hitrendy-dev-ports.json
 secrets/
 *.key
 *.pem
@@ -51,4 +52,3 @@ test_*.db
 firebase-debug.log
 firebase-debug.*.log
 hi-trend/
-

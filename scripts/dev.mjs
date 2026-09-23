@@ -11,14 +11,15 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 
+import { apiUrl, localhostUrl, writeRuntimePorts } from "./lib/dev-runtime.mjs";
 import { claimPort } from "./lib/ports.mjs";
 import { envFile, repoRoot } from "./lib/python.mjs";
 
 // The only pair where Google sign-in completes end to end: Google has
 // http://localhost:8000/api/v1/auth/google/callback registered as the redirect,
 // and the callback hands the browser to http://localhost:3000.
-const CANONICAL_API = 8000;
-const CANONICAL_WEB = 3000;
+const DEFAULT_API_PORT = 8000;
+const DEFAULT_WEB_PORT = 3000;
 
 const isWindows = process.platform === "win32";
 const npm = isWindows ? "npm.cmd" : "npm";
@@ -56,39 +57,33 @@ function warn(lines) {
  */
 function sharedEnv({ apiPort, webPort }) {
   const fileValues = readEnvFile();
+  const frontendUrl = localhostUrl(webPort);
+  const backendUrl = localhostUrl(apiPort, "127.0.0.1");
+  const localOrigins = (fileValues.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(
+      (origin) =>
+        origin &&
+        !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)
+    );
   const shared = {
     HITRENDY_PORTS_RESOLVED: "1",
     BACKEND_PORT: String(apiPort),
     PORT: String(webPort),
-    NEXT_PUBLIC_API_URL: `http://127.0.0.1:${apiPort}/api/v1`,
+    NEXT_PUBLIC_API_URL: apiUrl(apiPort),
+    FRONTEND_URL: frontendUrl,
+    ALLOWED_ORIGINS: [...new Set([...localOrigins, frontendUrl])].join(","),
   };
 
-  if (webPort !== CANONICAL_WEB) {
-    const frontendUrl = `http://localhost:${webPort}`;
-    shared.FRONTEND_URL = frontendUrl;
-
-    // The backend refuses to start when Google sign-in is configured and
-    // FRONTEND_URL is missing from ALLOWED_ORIGINS (app/core/config.py). Moving
-    // the frontend without widening the origin list would trade a broken login
-    // for a backend that will not boot at all.
-    const origins = (fileValues.ALLOWED_ORIGINS || `http://localhost:${CANONICAL_WEB}`)
-      .split(",")
-      .map((origin) => origin.trim())
-      .filter(Boolean);
-    if (!origins.includes(frontendUrl)) origins.push(frontendUrl);
-    shared.ALLOWED_ORIGINS = origins.join(",");
-  }
-
-  // Left alone on the canonical port: that value is what Google has registered,
-  // and rewriting it would be the one way to break a flow that works. Off it,
-  // pointing at the live port turns a dead-connection page into Google's own
-  // redirect_uri_mismatch, which at least names the problem.
-  if (apiPort !== CANONICAL_API && fileValues.GOOGLE_REDIRECT_URI) {
-    shared.GOOGLE_REDIRECT_URI = fileValues.GOOGLE_REDIRECT_URI.replace(
-      `:${CANONICAL_API}`,
-      `:${apiPort}`
-    );
-  }
+  if (fileValues.GOOGLE_REDIRECT_URI)
+    shared.GOOGLE_REDIRECT_URI = `${backendUrl}/api/v1/auth/google/callback`;
+  if (fileValues.SOCIAL_PUBLIC_BACKEND_URL)
+    shared.SOCIAL_PUBLIC_BACKEND_URL = backendUrl;
+  if (fileValues.INSTAGRAM_REDIRECT_URI)
+    shared.INSTAGRAM_REDIRECT_URI = `${backendUrl}/api/v1/social/instagram/callback`;
+  if (fileValues.PASSWORD_RESET_URL)
+    shared.PASSWORD_RESET_URL = `${frontendUrl}/reset-password`;
 
   return shared;
 }
@@ -199,23 +194,12 @@ function start({ name, args, env, critical }) {
 async function main() {
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, shutdown);
 
-  const api = await claimPort({ preferred: CANONICAL_API, label: "api" });
-  const web = await claimPort({ preferred: CANONICAL_WEB, label: "web" });
+  const api = await claimPort({ preferred: DEFAULT_API_PORT, label: "api" });
+  const web = await claimPort({ preferred: DEFAULT_WEB_PORT, label: "web" });
+  writeRuntimePorts({ apiPort: api.port, webPort: web.port });
 
   console.log(`[dev] api  -> http://127.0.0.1:${api.port}`);
   console.log(`[dev] web  -> http://localhost:${web.port}`);
-
-  if (api.port !== CANONICAL_API || web.port !== CANONICAL_WEB) {
-    warn([
-      "",
-      `Puertos no canónicos (esperados ${CANONICAL_API} y ${CANONICAL_WEB}).`,
-      "El inicio de sesión con Google NO va a funcionar: la consola de Google",
-      `solo tiene registrado http://localhost:${CANONICAL_API}/api/v1/auth/google/callback.`,
-      "Libera los puertos canónicos, o registra estos en Google Cloud Console.",
-      "El resto de la app funciona con normalidad.",
-      "",
-    ]);
-  }
 
   const env = sharedEnv({ apiPort: api.port, webPort: web.port });
 

@@ -9,43 +9,44 @@
 
 import { spawn } from "node:child_process";
 
+import { apiUrl, localhostUrl, readRuntimePorts, writeRuntimePorts } from "./lib/dev-runtime.mjs";
 import { claimPort } from "./lib/ports.mjs";
 import { repoRoot } from "./lib/python.mjs";
 
 // The backend sends the browser here after the Google callback, and .env pins
 // FRONTEND_URL to it.
-const CANONICAL_PORT = 3000;
+const DEFAULT_PORT = 3000;
 
 const isWindows = process.platform === "win32";
 
 async function resolvePort() {
-  const preferred = Number(process.env.PORT) || CANONICAL_PORT;
+  const preferred = Number(process.env.PORT) || DEFAULT_PORT;
   // `npm run dev` already claimed both ports and told the backend about this
   // one. Claiming it again here would only find our own reservation.
   if (process.env.HITRENDY_PORTS_RESOLVED) return preferred;
 
   const { port } = await claimPort({ preferred, label: "web" });
 
-  if (port !== CANONICAL_PORT) {
-    console.warn(`\n[web] ${CANONICAL_PORT} ocupado, sirviendo en ${port}.`);
-    console.warn("[web] El login con Google no funcionará aquí: el backend");
-    console.warn(`[web] devuelve el navegador a FRONTEND_URL (puerto ${CANONICAL_PORT}).\n`);
-  }
-
   return port;
 }
 
 async function main() {
   const port = await resolvePort();
+  const runtime = writeRuntimePorts({ webPort: port });
+  const apiPort = Number(process.env.BACKEND_PORT) || runtime.apiPort || 8000;
 
-  console.log(`[web] http://localhost:${port}`);
+  console.log(`[web] ${localhostUrl(port)}`);
 
   const child = spawn(
     isWindows ? "npm.cmd" : "npm",
     ["run", "dev", "-w", "starter/web"],
     {
       cwd: repoRoot,
-      env: { ...process.env, PORT: String(port) },
+      env: {
+        ...process.env,
+        PORT: String(port),
+        NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || apiUrl(apiPort),
+      },
       stdio: "inherit",
     }
   );

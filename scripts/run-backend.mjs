@@ -5,6 +5,7 @@
 
 import { existsSync } from "node:fs";
 
+import { apiUrl, localhostUrl, writeRuntimePorts } from "./lib/dev-runtime.mjs";
 import { claimPort } from "./lib/ports.mjs";
 import {
   createRunner,
@@ -29,7 +30,7 @@ const REQUIRED_MODULES = [
 // its redirect, and .env points GOOGLE_REDIRECT_URI and
 // SOCIAL_PUBLIC_BACKEND_URL at the same place. Serving anywhere else leaves
 // both callbacks arriving at a port nothing is listening on.
-const CANONICAL_PORT = 8000;
+const DEFAULT_PORT = 8000;
 
 /**
  * The port to serve on.
@@ -41,17 +42,10 @@ const CANONICAL_PORT = 8000;
  * for anything it did not start.
  */
 async function resolvePort() {
-  const preferred = Number(process.env.BACKEND_PORT) || CANONICAL_PORT;
+  const preferred = Number(process.env.BACKEND_PORT) || DEFAULT_PORT;
   if (process.env.HITRENDY_PORTS_RESOLVED) return preferred;
 
   const { port } = await claimPort({ preferred, label: "api" });
-
-  if (port !== CANONICAL_PORT) {
-    console.warn(`\n[backend] ${CANONICAL_PORT} ocupado, sirviendo en ${port}.`);
-    console.warn("[backend] El login con Google no funcionará aquí, y el proxy de");
-    console.warn(`[backend] Next busca el ${CANONICAL_PORT}. Arranca la web con:\n`);
-    console.warn(`    NEXT_PUBLIC_API_URL=http://127.0.0.1:${port}/api/v1 npm run web:dev\n`);
-  }
 
   return port;
 }
@@ -73,6 +67,25 @@ async function main() {
   }
 
   const port = await resolvePort();
+  const runtime = writeRuntimePorts({ apiPort: port });
+  const webPort = Number(process.env.PORT) || runtime.webPort || 3000;
+  const backendUrl = localhostUrl(port, "127.0.0.1");
+  const frontendUrl = localhostUrl(webPort);
+
+  Object.assign(process.env, {
+    BACKEND_PORT: String(port),
+    FRONTEND_URL: frontendUrl,
+    ALLOWED_ORIGINS: frontendUrl,
+    NEXT_PUBLIC_API_URL: apiUrl(port),
+  });
+  if (process.env.GOOGLE_REDIRECT_URI)
+    process.env.GOOGLE_REDIRECT_URI = `${backendUrl}/api/v1/auth/google/callback`;
+  if (process.env.SOCIAL_PUBLIC_BACKEND_URL)
+    process.env.SOCIAL_PUBLIC_BACKEND_URL = backendUrl;
+  if (process.env.INSTAGRAM_REDIRECT_URI)
+    process.env.INSTAGRAM_REDIRECT_URI = `${backendUrl}/api/v1/social/instagram/callback`;
+  if (process.env.PASSWORD_RESET_URL)
+    process.env.PASSWORD_RESET_URL = `${frontendUrl}/reset-password`;
   const { run, state } = createRunner();
 
   const migration = await run(
